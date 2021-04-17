@@ -25,6 +25,7 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.async.AsyncFunction;
 import org.apache.flink.streaming.api.functions.async.ResultFuture;
 import org.apache.flink.streaming.api.functions.async.RichAsyncFunction;
+import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.operators.async.AsyncWaitOperator;
 import org.redisson.Redisson;
@@ -36,6 +37,7 @@ import org.redisson.config.ClusterServersConfig;
 import org.redisson.config.Config;
 import org.redisson.config.MasterSlaveServersConfig;
 import org.redisson.config.SingleServerConfig;
+import org.seepure.flink.datastream.asyncio.redis.sink.SimpleSinkFunction;
 import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomSource;
 
 public class SimpleAsyncIOJob {
@@ -45,10 +47,11 @@ public class SimpleAsyncIOJob {
         ParameterTool params = ParameterTool.fromArgs(args);
         long timeout = params.getInt("redis.timeout", 1);
         StreamExecutionEnvironment env = getEnv(params);
-        DataStream<String> in = env.addSource(new SelfRandomSource("mykey", 10, 1500));
+        DataStream<String> in = env.addSource(new SelfRandomSource("mykey", 10, 1000));
         SingleOutputStreamOperator<String> stream = AsyncDataStream
-                .unorderedWait(in, new SimpleRedisAsyncFunction(), timeout * 2, TimeUnit.SECONDS, 10);
-        stream.print();
+                .unorderedWait(in, new SimpleRedisAsyncFunction(), timeout * 2, TimeUnit.SECONDS, 20);
+        //stream.print();
+        stream.addSink(new SimpleSinkFunction());
 
           //The operator for AsyncFunction (AsyncWaitOperator) must currently be at the head of operator chains for consistency reasons
         //For the reasons given in issue FLINK-13063, we currently must break operator chains for the AsyncWaitOperator to prevent potential consistency problems.
@@ -168,18 +171,11 @@ public class SimpleAsyncIOJob {
                         clusterServersConfig.setPassword(password);
                     }
                     break;
-                case "master_slaves":
+                default:
                     MasterSlaveServersConfig masterSlaveServersConfig = config.useMasterSlaveServers();
                     masterSlaveServersConfig.setMasterAddress(nodes);
                     if (StringUtils.isNotBlank(password)) {
                         masterSlaveServersConfig.setPassword(password);
-                    }
-                    break;
-                default:
-                    SingleServerConfig singleServerConfig = config.useSingleServer();
-                    singleServerConfig.setAddress(nodes);
-                    if (StringUtils.isNotBlank(password)) {
-                        singleServerConfig.setPassword(password);
                     }
                     break;
             }

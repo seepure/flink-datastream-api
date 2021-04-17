@@ -1,8 +1,12 @@
 package org.seepure.flink.datastream.asyncio.redis.source;
 
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SelfRandomSource extends RichSourceFunction<String> {
+
+    private static Logger LOG = LoggerFactory.getLogger(SelfRandomSource.class);
 
     private volatile boolean running = true;
     private String keyColumn;
@@ -23,7 +27,8 @@ public class SelfRandomSource extends RichSourceFunction<String> {
             num = num % bound;
             String msg = keyColumn + "=" + num;
             ctx.collect(msg);
-            System.out.println("source=" + msg);
+            //System.out.println("source=" + msg);
+            LOG.info("source=" + msg);
             Thread.sleep(interval);
             ++num;
         }
