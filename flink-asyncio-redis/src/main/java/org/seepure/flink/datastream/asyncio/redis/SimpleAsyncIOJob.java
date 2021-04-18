@@ -12,6 +12,7 @@ import org.apache.flink.streaming.api.functions.async.RichAsyncFunction;
 import org.redisson.Redisson;
 import org.redisson.api.RBucket;
 import org.redisson.api.RFuture;
+import org.redisson.api.RMap;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 import org.seepure.flink.datastream.asyncio.redis.config.DimRedisKvTextSchema;
@@ -24,16 +25,20 @@ import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomSource;
 import org.seepure.flink.datastream.asyncio.redis.util.ArgUtil;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class SimpleAsyncIOJob {
 
     public static void main(String[] args) throws Exception {
-        String arg = args != null && args.length >= 1 ? args[0] :
-                //"redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.136:7000,redis://192.168.234.136:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001";
-                "redis.mode=cluster;redis.nodes=redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001"
+        String defaultRedisStringJoinArg = "redis.mode=cluster;redis.nodes=redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001"
                 + ";source.schema.type=kv_text;source.schema.content={};dim.schema.type=redis.kv_text;dim.schema.content={}";
+        String defaultRedisHashJoinArg = "redis.mode=cluster;redis.nodes=redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001"
+                + ";source.schema.type=kv_text;source.schema.content={};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=th_";
+        String arg = args != null && args.length >= 1 ? args[0] : defaultRedisHashJoinArg;
+                //"redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.136:7000,redis://192.168.234.136:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001";
         Map<String, String> configMap = ArgUtil.getArgMapFromArgs(arg);
         ParameterTool params = ParameterTool.fromMap(configMap);
         long timeout = 1;
@@ -154,13 +159,30 @@ public class SimpleAsyncIOJob {
         }
 
         private void doHashJoin(String key, String input, Map<String, String> source, ResultFuture<String> resultFuture) {
-            resultFuture.complete(Collections.singletonList(""));
+            RMap<String, String> rMap = client.getMap(key);
+            RFuture<Set<Map.Entry<String, String>>> setRFuture = rMap.readAllEntrySetAsync();
+            setRFuture.whenComplete((res, exception) -> {
+                if (exception != null) {
+                    //这里一定要保留，否则会阻塞
+                    exception.printStackTrace();    //todo 抽样打印日志
+                    resultFuture.complete(Collections.singletonList(""));
+                } else if (res == null) {
+                    //这里一定要保留，否则会阻塞
+                    resultFuture.complete(Collections.singletonList(""));
+                } else {
+                    Map<String, String> map = new LinkedHashMap<>();
+                    for (Map.Entry<String, String> entry : res) {
+                        map.put(entry.getKey(), entry.getValue());
+                    }
+                    resultFuture.complete(Collections.singletonList(input + "|" + "joinResult=" + map.toString()));
+                }
+
+            });
         }
 
         @Override
         public void timeout(String input, ResultFuture<String> resultFuture) throws Exception {
 
         }
-
     }
 }
