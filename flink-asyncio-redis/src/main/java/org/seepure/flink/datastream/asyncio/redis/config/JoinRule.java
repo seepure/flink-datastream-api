@@ -1,12 +1,13 @@
 package org.seepure.flink.datastream.asyncio.redis.config;
 
+import java.io.Serializable;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-public class JoinRule {
+public class JoinRule implements Serializable {
     private String type;
     private List<String> leftFields;
     private List<String> rightFields;
@@ -15,7 +16,7 @@ public class JoinRule {
         JoinRule joinRule = new JoinRule();
         joinRule.type = configMap.getOrDefault("joinRule.type", "full_join");
         String leftString = configMap.getOrDefault("joinRule.leftFields", "mykey");
-        String rightString = configMap.getOrDefault("joinRule.rightFields", "tp_");
+        String rightString = configMap.get("joinRule.rightFields");
         if (StringUtils.isBlank(leftString) || StringUtils.isBlank(rightString)) {
             throw new IllegalArgumentException("parseJoinRule error!");
         }

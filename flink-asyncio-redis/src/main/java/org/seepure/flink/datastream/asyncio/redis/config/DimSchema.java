@@ -1,13 +1,14 @@
 package org.seepure.flink.datastream.asyncio.redis.config;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.Map;
 
-public abstract class DimSchema<IN> /*implements DeserializationSchema<Map<String, String>>*/ {
+public abstract class DimSchema<IN> implements Serializable /*implements DeserializationSchema<Map<String, String>>*/ {
 
     public static DimSchema getDimSchema(Map<String, String> configMap) throws IOException {
         String type = configMap.get("dim.schema.type");
-        String schemaContent = configMap.get("dim.schema.content");
+        String schemaContent = configMap.getOrDefault("dim.schema.content", "{}");
         DimSchema dimSchema = null;
         switch (type) {
             case "redis.kv_text":

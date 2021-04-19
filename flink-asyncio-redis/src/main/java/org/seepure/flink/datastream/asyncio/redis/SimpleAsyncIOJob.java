@@ -36,9 +36,9 @@ public class SimpleAsyncIOJob {
         String defaultRedisStringJoinArg = "redis.mode=cluster;redis.nodes=redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001"
                 + ";source.schema.type=kv_text;source.schema.content={};dim.schema.type=redis.kv_text;dim.schema.content={}";
         String defaultRedisHashJoinArg = "redis.mode=cluster;redis.nodes=redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001"
-                + ";source.schema.type=kv_text;source.schema.content={};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=th_";
+                + ";source.schema.type=kv_text;source.schema.content={};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=th_%s";
         String arg = args != null && args.length >= 1 ? args[0] : defaultRedisHashJoinArg;
-                //"redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.136:7000,redis://192.168.234.136:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001";
+                //"redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001";
         Map<String, String> configMap = ArgUtil.getArgMapFromArgs(arg);
         ParameterTool params = ParameterTool.fromMap(configMap);
         long timeout = 1;
@@ -90,7 +90,7 @@ public class SimpleAsyncIOJob {
 
     public static class SimpleRedisAsyncFunction extends RichAsyncFunction<String, String> {
 
-        private static transient RedissonClient client;
+        private static volatile transient RedissonClient client;
         private long timeout;
         private Map<String, String> configMap;
         private SourceSchema sourceSchema;
@@ -124,10 +124,10 @@ public class SimpleAsyncIOJob {
             if (source == null || source.isEmpty()) {
                 return;
             }
-            String redisKeyPrefix = joinRule.getRightFields().get(0);
+            String keyExpression = joinRule.getRightFields().get(0);
             String sourceJoinColumnName = joinRule.getLeftFields().get(0);
             String sourceJoinColumnValue = source.get(sourceJoinColumnName);
-            String redisKey = redisKeyPrefix + sourceJoinColumnValue;
+            String redisKey = String.format(keyExpression, sourceJoinColumnValue); //keyExpression + sourceJoinColumnValue;
             //1. deal with cache
 
             //2. query redis

@@ -1,8 +1,9 @@
 package org.seepure.flink.datastream.asyncio.redis.config;
 
+import java.io.Serializable;
 import java.util.Map;
 
-public abstract class SourceSchema /*implements DeserializationSchema<Map<String, String>>*/ {
+public abstract class SourceSchema implements Serializable /*implements DeserializationSchema<Map<String, String>>*/ {
 
     public static SourceSchema getSourceSchema(Map<String, String> configMap) throws Exception {
         String type = configMap.getOrDefault("source.schema.type", "kv_text");
