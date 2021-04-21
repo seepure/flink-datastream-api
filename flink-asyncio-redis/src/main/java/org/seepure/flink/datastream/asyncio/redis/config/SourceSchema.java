@@ -6,11 +6,11 @@ import java.util.Map;
 public abstract class SourceSchema implements Serializable /*implements DeserializationSchema<Map<String, String>>*/ {
 
     public static SourceSchema getSourceSchema(Map<String, String> configMap) throws Exception {
-        String type = configMap.getOrDefault("source.schema.type", "kv_text");
+        String type = configMap.getOrDefault("source.schema.type", "MQ_KV");
         String schemaContent = configMap.get("source.schema.content");
         SourceSchema sourceSchema = null;
         switch (type) {
-            case "kv_text" :
+            case "MQ_KV" :
                 sourceSchema = new KvTextSourceSchema();
                 sourceSchema.parseConfig(schemaContent);
                 break;

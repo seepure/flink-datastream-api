@@ -3,7 +3,7 @@ package org.seepure.flink.datastream.asyncio.redis.config;
 import java.io.IOException;
 import java.util.Map;
 
-public class DimRedisHashSchema extends DimSchema<Map<String, String>> {
+public class DimRedisHashSchema extends DimRedisSchema<Map<String, String>> {
 
     @Override
     public void parseConfig(String configContent) throws IOException {

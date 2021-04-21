@@ -10,21 +10,45 @@ import java.util.Map;
 
 public class RedissonConfig {
     public static Config getRedissonConfig(Map<String, String> configMap) {
-        String mode = configMap.getOrDefault("redis.mode", "").toLowerCase();
-        String nodes = configMap.getOrDefault("redis.nodes", "redis://192.168.234.137:6379");
+        String mode = configMap.get("redis.mode");
+        if (StringUtils.isBlank(mode)) {
+            mode = configMap.getOrDefault("mode", "").toLowerCase();
+        }
+        String nodes = configMap.get("redis.nodes");
+        if (StringUtils.isBlank(nodes)) {
+            nodes = configMap.get("nodes");
+        }
         String password = configMap.get("redis.auth");
+        if (password == null) {
+            password = configMap.get("auth");
+        }
         Config config = new Config();
         config.setCodec(StringCodec.INSTANCE);
         switch (mode) {
             case "cluster":
                 ClusterServersConfig clusterServersConfig = config.useClusterServers();
-                clusterServersConfig.addNodeAddress(nodes.split(","));
+                String[] addresses = nodes.split(",");
+                if (addresses == null || addresses.length < 1) {
+                    throw new IllegalArgumentException("empty config nodes for redis.");
+                }
+                for (int i=0; i < addresses.length; i++) {
+                    if (!addresses[i].startsWith("redis://")) {
+                        addresses[i] = "redis://" + addresses[i];
+                    }
+                }
+                clusterServersConfig.addNodeAddress(addresses);
                 if (StringUtils.isNotBlank(password)) {
                     clusterServersConfig.setPassword(password);
                 }
                 break;
             default:
                 MasterSlaveServersConfig masterSlaveServersConfig = config.useMasterSlaveServers();
+                if (StringUtils.isBlank(nodes)) {
+                    throw new IllegalArgumentException("empty config nodes for redis.");
+                }
+                if (!nodes.startsWith("redis://")) {
+                    nodes = "redis://" + nodes;
+                }
                 masterSlaveServersConfig.setMasterAddress(nodes);
                 if (StringUtils.isNotBlank(password)) {
                     masterSlaveServersConfig.setPassword(password);

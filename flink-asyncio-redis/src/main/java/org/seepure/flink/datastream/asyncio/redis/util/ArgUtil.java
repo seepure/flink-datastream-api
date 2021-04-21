@@ -1,11 +1,10 @@
 package org.seepure.flink.datastream.asyncio.redis.util;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 public class ArgUtil {
     private static Logger LOG = LoggerFactory.getLogger(ArgUtil.class);
@@ -22,5 +21,18 @@ public class ArgUtil {
             }
         }
         return record;
+    }
+
+    public static String mapToBeaconKV(Map<String, String> map) {
+        StringBuilder sb = new StringBuilder();
+        int i = 0;
+        for (Map.Entry<String, String> entry : map.entrySet()) {
+            sb.append(entry.getKey()).append("=").append(entry.getValue());
+            if (i < map.size() - 1) {
+                sb.append("|");
+            }
+            i++;
+        }
+        return sb.toString();
     }
 }

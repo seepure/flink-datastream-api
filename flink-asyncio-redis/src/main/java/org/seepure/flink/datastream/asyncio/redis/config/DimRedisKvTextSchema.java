@@ -12,7 +12,7 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class DimRedisKvTextSchema extends DimSchema<String> {
+public class DimRedisKvTextSchema extends DimRedisSchema<String> {
     private String separator1;
     private String separator2;
 

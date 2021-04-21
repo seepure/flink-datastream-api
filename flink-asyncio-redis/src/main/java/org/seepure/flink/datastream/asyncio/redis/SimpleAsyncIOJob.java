@@ -16,7 +16,7 @@ import org.redisson.api.RMap;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 import org.seepure.flink.datastream.asyncio.redis.config.DimRedisKvTextSchema;
-import org.seepure.flink.datastream.asyncio.redis.config.DimSchema;
+import org.seepure.flink.datastream.asyncio.redis.config.DimRedisSchema;
 import org.seepure.flink.datastream.asyncio.redis.config.JoinRule;
 import org.seepure.flink.datastream.asyncio.redis.config.RedissonConfig;
 import org.seepure.flink.datastream.asyncio.redis.config.SourceSchema;
@@ -34,12 +34,13 @@ public class SimpleAsyncIOJob {
 
     public static void main(String[] args) throws Exception {
         String defaultRedisStringJoinArg = "redis.mode=cluster;redis.nodes=redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001"
-                + ";source.schema.type=kv_text;source.schema.content={};dim.schema.type=redis.kv_text;dim.schema.content={}";
+                + ";source.schema.type=MQ_KV;source.schema.content={};dim.schema.type=redis.kv_text;dim.schema.content={}";
         String defaultRedisHashJoinArg = "redis.mode=cluster;redis.nodes=redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001"
-                + ";source.schema.type=kv_text;source.schema.content={};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=th_%s";
+                + ";source.schema.type=MQ_KV;source.schema.content={};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=th_%s";
         String arg = args != null && args.length >= 1 ? args[0] : defaultRedisHashJoinArg;
                 //"redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001";
         Map<String, String> configMap = ArgUtil.getArgMapFromArgs(arg);
+        configMap.put("redis.nodes", "192.168.234.137:7000,192.168.234.137:7001,192.168.234.138:7000,192.168.234.138:7001,192.168.234.134:7000,192.168.234.134:7001");
         ParameterTool params = ParameterTool.fromMap(configMap);
         long timeout = 1;
         StreamExecutionEnvironment env = getEnv(params);
@@ -94,7 +95,7 @@ public class SimpleAsyncIOJob {
         private long timeout;
         private Map<String, String> configMap;
         private SourceSchema sourceSchema;
-        private DimSchema dimSchema;
+        private DimRedisSchema dimRedisSchema;
         private JoinRule joinRule;
 
         @Override
@@ -105,7 +106,7 @@ public class SimpleAsyncIOJob {
             configMap = globalParams.toMap();
             timeout = Long.valueOf(configMap.getOrDefault("redis.timeout", "10"));
             sourceSchema = SourceSchema.getSourceSchema(configMap);
-            dimSchema = DimSchema.getDimSchema(configMap);
+            dimRedisSchema = DimRedisSchema.getDimSchema(configMap);
             joinRule = JoinRule.parseJoinRule(configMap);
             if (client == null) {
                 synchronized (SimpleRedisAsyncFunction.class) {
@@ -127,11 +128,11 @@ public class SimpleAsyncIOJob {
             String keyExpression = joinRule.getRightFields().get(0);
             String sourceJoinColumnName = joinRule.getLeftFields().get(0);
             String sourceJoinColumnValue = source.get(sourceJoinColumnName);
-            String redisKey = String.format(keyExpression, sourceJoinColumnValue); //keyExpression + sourceJoinColumnValue;
+            String redisKey = String.format(keyExpression, sourceJoinColumnValue);
             //1. deal with cache
 
             //2. query redis
-            if (dimSchema instanceof DimRedisKvTextSchema) {
+            if (dimRedisSchema instanceof DimRedisKvTextSchema) {
                 doStringJoin(redisKey, input, source, resultFuture);
             } else {
                 doHashJoin(redisKey, input, source, resultFuture);
@@ -152,7 +153,18 @@ public class SimpleAsyncIOJob {
                     //这里一定要保留，否则会阻塞
                     resultFuture.complete(Collections.singletonList(""));
                 } else {
-                    resultFuture.complete(Collections.singletonList(input + "|" + "joinResult=" + res));
+                    int size = 0;
+                    if (source != null) {
+                        size += source.size();
+                    }
+                    Map<String, String> resMap = dimRedisSchema.parseInput(res);
+                    size += resMap.size();
+                    Map<String, String> finalMap = new LinkedHashMap<>(size);
+                    if (source != null) {
+                        finalMap.putAll(source);
+                    }
+                    finalMap.putAll(resMap);
+                    resultFuture.complete(Collections.singletonList(ArgUtil.mapToBeaconKV(finalMap)));
                 }
 
             });
@@ -170,11 +182,18 @@ public class SimpleAsyncIOJob {
                     //这里一定要保留，否则会阻塞
                     resultFuture.complete(Collections.singletonList(""));
                 } else {
-                    Map<String, String> map = new LinkedHashMap<>();
+                    int size = res.size();
+                    if (source != null) {
+                        size += source.size();
+                    }
+                    Map<String, String> map = new LinkedHashMap<>(size);
+                    if (source != null) {
+                        map.putAll(source);
+                    }
                     for (Map.Entry<String, String> entry : res) {
                         map.put(entry.getKey(), entry.getValue());
                     }
-                    resultFuture.complete(Collections.singletonList(input + "|" + "joinResult=" + map.toString()));
+                    resultFuture.complete(Collections.singletonList(ArgUtil.mapToBeaconKV(map)));
                 }
 
             });

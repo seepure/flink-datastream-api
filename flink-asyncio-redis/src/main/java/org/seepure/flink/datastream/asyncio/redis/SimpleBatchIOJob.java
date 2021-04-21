@@ -22,7 +22,7 @@ import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 import org.seepure.flink.datastream.asyncio.redis.SimpleAsyncIOJob.SimpleRedisAsyncFunction;
 import org.seepure.flink.datastream.asyncio.redis.config.DimRedisHashSchema;
-import org.seepure.flink.datastream.asyncio.redis.config.DimSchema;
+import org.seepure.flink.datastream.asyncio.redis.config.DimRedisSchema;
 import org.seepure.flink.datastream.asyncio.redis.config.JoinRule;
 import org.seepure.flink.datastream.asyncio.redis.config.RedissonConfig;
 import org.seepure.flink.datastream.asyncio.redis.config.SourceSchema;
@@ -38,10 +38,10 @@ public class SimpleBatchIOJob {
     public static void main(String[] args) throws Exception {
         String defaultRedisStringJoinArg =
                 "redis.mode=cluster;redis.nodes=redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001"
-                        + ";source.schema.type=kv_text;source.schema.content={};dim.schema.type=redis.kv_text;dim.schema.content={};joinRule.rightFields=tp_%s";
+                        + ";source.schema.type=MQ_KV;source.schema.content={};dim.schema.type=redis.kv_text;dim.schema.content={};joinRule.rightFields=tp_%s";
         String defaultRedisHashJoinArg =
                 "redis.mode=cluster;redis.nodes=redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001"
-                        + ";source.schema.type=kv_text;source.schema.content={};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=th_%s";
+                        + ";source.schema.type=MQ_KV;source.schema.content={};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=th_%s";
         String arg = args != null && args.length >= 1 ? args[0] : defaultRedisStringJoinArg;
         //"redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001";
         Map<String, String> configMap = ArgUtil.getArgMapFromArgs(arg);
@@ -72,7 +72,7 @@ public class SimpleBatchIOJob {
         private volatile boolean running = true;
         private Map<String, String> configMap;
         private SourceSchema sourceSchema;
-        private DimSchema dimSchema;
+        private DimRedisSchema dimRedisSchema;
         private JoinRule joinRule;
         private int batchSize;
         private long minBatchTime;
@@ -92,7 +92,7 @@ public class SimpleBatchIOJob {
             collectorLock = new Object();
             REF_COUNTER.getAndIncrement();
             sourceSchema = SourceSchema.getSourceSchema(configMap);
-            dimSchema = DimSchema.getDimSchema(configMap);
+            dimRedisSchema = DimRedisSchema.getDimSchema(configMap);
             joinRule = JoinRule.parseJoinRule(configMap);
             batchSize = Integer.parseInt(configMap.getOrDefault("batchSize", "10"));
             minBatchTime = Integer.parseInt(configMap.getOrDefault("minBatchTime", "500"));
@@ -152,7 +152,7 @@ public class SimpleBatchIOJob {
             String keyExpression = joinRule.getRightFields().get(0);
             String sourceJoinColumnName = joinRule.getLeftFields().get(0);
             String sourceJoinColumnValue = source.get(sourceJoinColumnName);
-            String redisKey = String.format(keyExpression, sourceJoinColumnValue);//redisExpression + sourceJoinColumnValue;
+            String redisKey = String.format(keyExpression, sourceJoinColumnValue);
             //1. deal with cache
 //            if (cached) {
 //                synchronized (collectorLock) {
@@ -167,7 +167,7 @@ public class SimpleBatchIOJob {
         }
 
         private void doBufferBatch(List<BufferEntry> entries) {
-            if (dimSchema instanceof DimRedisHashSchema) {
+            if (dimRedisSchema instanceof DimRedisHashSchema) {
                 doHashJoin(entries);
             } else {
                 doStringJoin(entries);
@@ -184,7 +184,8 @@ public class SimpleBatchIOJob {
                     if (ex != null) {
                         ex.printStackTrace();
                     } else if (res != null) {
-                        Map<String, String> map = dimSchema.parseInput(String.valueOf(res));
+                        Map<String, String> map = dimRedisSchema.parseInput(String.valueOf(res));
+                        //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
                         bufferEntry.getSource().putAll(map);
                         results.add(bufferEntry.getSource());
                     }
@@ -193,7 +194,8 @@ public class SimpleBatchIOJob {
             batch.execute();
             synchronized (collectorLock) {
                 for (Map<String, String> map : results) {
-                    out.collect(map.toString());
+                    //todo 根据JoinRule 来决定输出格式
+                    out.collect(ArgUtil.mapToBeaconKV(map));
                 }
             }
         }
@@ -206,7 +208,8 @@ public class SimpleBatchIOJob {
                 RFuture<Map<Object, Object>> rFuture = batch.getMap(bufferEntry.getRedisKey()).readAllMapAsync();
                 rFuture.whenComplete((res, ex) -> {
                     if (res != null) {
-                        Map<String, String> map = dimSchema.parseInput(res);
+                        Map<String, String> map = dimRedisSchema.parseInput(res);
+                        //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
                         bufferEntry.getSource().putAll(map);
                         results.add(bufferEntry.getSource());
                     }
@@ -215,7 +218,8 @@ public class SimpleBatchIOJob {
             batch.execute();
             synchronized (collectorLock) {
                 for (Map<String, String> map : results) {
-                    out.collect(map.toString());
+                    //todo 根据JoinRule 来决定输出格式
+                    out.collect(ArgUtil.mapToBeaconKV(map));
                 }
             }
         }
