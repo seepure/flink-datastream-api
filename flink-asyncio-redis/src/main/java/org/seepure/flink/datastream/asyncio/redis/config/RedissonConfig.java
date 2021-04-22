@@ -9,6 +9,7 @@ import org.redisson.config.MasterSlaveServersConfig;
 import java.util.Map;
 
 public class RedissonConfig {
+
     public static Config getRedissonConfig(Map<String, String> configMap) {
         String mode = configMap.get("redis.mode");
         if (StringUtils.isBlank(mode)) {

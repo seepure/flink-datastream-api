@@ -31,6 +31,9 @@ public class DimRedisKvTextSchema extends DimRedisSchema<String> {
     @Override
     public Map<String, String> parseInput(String input) {
         Map<String, String> map = new LinkedHashMap<>();
+        if (input == null) {
+            return map;
+        }
         String[] kvs = StringUtils.split(input, separator1);
         if (kvs != null && kvs.length > 0) {
             for (String keyValue : kvs) {

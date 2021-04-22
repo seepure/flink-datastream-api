@@ -8,6 +8,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.Configuration;
@@ -20,7 +22,6 @@ import org.redisson.api.RBatch;
 import org.redisson.api.RFuture;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
-import org.seepure.flink.datastream.asyncio.redis.SimpleAsyncIOJob.SimpleRedisAsyncFunction;
 import org.seepure.flink.datastream.asyncio.redis.config.DimRedisHashSchema;
 import org.seepure.flink.datastream.asyncio.redis.config.DimRedisSchema;
 import org.seepure.flink.datastream.asyncio.redis.config.JoinRule;
@@ -45,7 +46,7 @@ public class SimpleBatchIOJob {
         String arg = args != null && args.length >= 1 ? args[0] : defaultRedisHashJoinArg;
         //"redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001";
         Map<String, String> configMap = ArgUtil.getArgMapFromArgs(arg);
-        configMap.put("redis.nodes", "redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001");
+        //configMap.put("redis.nodes", "redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001");
         //configMap.put("redis.nodes", "redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001");
         ParameterTool params = ParameterTool.fromMap(configMap);
         StreamExecutionEnvironment env = getEnv(params);
@@ -68,7 +69,7 @@ public class SimpleBatchIOJob {
         private static final Logger LOG = LoggerFactory.getLogger(SimpleRedisBatchFlatMap.class);
         private static final AtomicInteger REF_COUNTER = new AtomicInteger(0);
         private static volatile transient RedissonClient client;
-        private transient Object collectorLock;
+        private transient ReentrantLock collectorLock;
         private volatile boolean running = true;
         private Map<String, String> configMap;
         private SourceSchema sourceSchema;
@@ -89,16 +90,16 @@ public class SimpleBatchIOJob {
         public void open(Configuration parameters) throws Exception {
             AssertUtil.assertTrue(configMap != null, "empty configMap!");
             LOG.info("configMap: " + configMap.toString());
-            collectorLock = new Object();
+            collectorLock = new ReentrantLock();
             REF_COUNTER.getAndIncrement();
             sourceSchema = SourceSchema.getSourceSchema(configMap);
             dimRedisSchema = DimRedisSchema.getDimSchema(configMap);
             joinRule = JoinRule.parseJoinRule(configMap);
-            batchSize = Integer.parseInt(configMap.getOrDefault("batchSize", "10"));
-            minBatchTime = Integer.parseInt(configMap.getOrDefault("minBatchTime", "500"));
+            batchSize = Integer.parseInt(configMap.getOrDefault("batchSize", "1000"));
+            minBatchTime = Integer.parseInt(configMap.getOrDefault("minBatchTime", "1000"));
             buffer = new LinkedBlockingQueue<>(batchSize + batchSize >> 1);
             if (client == null) {
-                synchronized (SimpleRedisAsyncFunction.class) {
+                synchronized (SimpleRedisBatchFlatMap.class) {
                     if (client == null) {
                         Config config = RedissonConfig.getRedissonConfig(configMap);
                         client = Redisson.create(config);
@@ -117,7 +118,7 @@ public class SimpleBatchIOJob {
                             buffer.drainTo(entries, batchSize);
                             doBufferBatch(entries);
                         }
-                        Thread.sleep(10);
+                        Thread.sleep(5);
                     } catch (Exception e) {
 
                     }
@@ -129,6 +130,7 @@ public class SimpleBatchIOJob {
         @Override
         public void close() throws Exception {
             running = false;
+            threadPool.shutdown();
             while (!buffer.isEmpty()) {
                 List<BufferEntry> entries = new ArrayList<>(batchSize);
                 buffer.drainTo(entries, batchSize);
@@ -166,7 +168,10 @@ public class SimpleBatchIOJob {
             buffer.put(bufferEntry);
         }
 
-        private void doBufferBatch(List<BufferEntry> entries) {
+        protected void doBufferBatch(List<BufferEntry> entries) {
+            if (CollectionUtils.isEmpty(entries)) {
+                return;
+            }
             if (dimRedisSchema instanceof DimRedisHashSchema) {
                 doHashJoin(entries);
             } else {
@@ -192,11 +197,14 @@ public class SimpleBatchIOJob {
                 });
             }
             batch.execute();
-            synchronized (collectorLock) {
+            collectorLock.lock();
+            try {
                 for (Map<String, String> map : results) {
                     //todo 根据JoinRule 来决定输出格式
                     out.collect(ArgUtil.mapToBeaconKV(map));
                 }
+            } finally {
+                collectorLock.unlock();
             }
         }
 
@@ -216,11 +224,14 @@ public class SimpleBatchIOJob {
                 });
             }
             batch.execute();
-            synchronized (collectorLock) {
+            collectorLock.lock();
+            try {
                 for (Map<String, String> map : results) {
                     //todo 根据JoinRule 来决定输出格式
                     out.collect(ArgUtil.mapToBeaconKV(map));
                 }
+            } finally {
+                collectorLock.unlock();
             }
         }
 

@@ -11,6 +11,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.utils.ParameterTool;
@@ -24,7 +25,6 @@ import org.redisson.api.RBatch;
 import org.redisson.api.RFuture;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
-import org.seepure.flink.datastream.asyncio.redis.SimpleAsyncIOJob.SimpleRedisAsyncFunction;
 import org.seepure.flink.datastream.asyncio.redis.config.DimRedisHashSchema;
 import org.seepure.flink.datastream.asyncio.redis.config.DimRedisSchema;
 import org.seepure.flink.datastream.asyncio.redis.config.JoinRule;
@@ -71,9 +71,8 @@ public class OptimizedBatchIOJob {
 
         private static final Logger LOG = LoggerFactory.getLogger(OptimizedRedisBatchFlatMap.class);
         private static final AtomicInteger REF_COUNTER = new AtomicInteger(0);
-        private static final Object EMPTY_RESULT = new Object();
         private static volatile transient RedissonClient client;
-        private transient Object collectorLock;
+        private transient ReentrantLock collectorLock;
         private volatile boolean running = true;
         private Map<String, String> configMap;
         private SourceSchema sourceSchema;
@@ -94,16 +93,16 @@ public class OptimizedBatchIOJob {
         public void open(Configuration parameters) throws Exception {
             AssertUtil.assertTrue(configMap != null, "empty configMap!");
             LOG.info("configMap: " + configMap.toString());
-            collectorLock = new Object();
+            collectorLock = new ReentrantLock();
             REF_COUNTER.getAndIncrement();
             sourceSchema = SourceSchema.getSourceSchema(configMap);
             dimRedisSchema = DimRedisSchema.getDimSchema(configMap);
             joinRule = JoinRule.parseJoinRule(configMap);
-            batchSize = Integer.parseInt(configMap.getOrDefault("batchSize", "20"));
-            minBatchTime = Integer.parseInt(configMap.getOrDefault("minBatchTime", "500"));
+            batchSize = Integer.parseInt(configMap.getOrDefault("batchSize", "1000"));
+            minBatchTime = Integer.parseInt(configMap.getOrDefault("minBatchTime", "1000"));
             buffer = new LinkedBlockingQueue<>(batchSize + batchSize >> 1);
             if (client == null) {
-                synchronized (SimpleRedisAsyncFunction.class) {
+                synchronized (OptimizedRedisBatchFlatMap.class) {
                     if (client == null) {
                         Config config = RedissonConfig.getRedissonConfig(configMap);
                         client = Redisson.create(config);
@@ -122,7 +121,7 @@ public class OptimizedBatchIOJob {
                             buffer.drainTo(entries, batchSize);
                             doBufferBatch(entries);
                         }
-                        Thread.sleep(50);
+                        Thread.sleep(5);
                     } catch (Exception e) {
 
                     }
@@ -134,6 +133,7 @@ public class OptimizedBatchIOJob {
         @Override
         public void close() throws Exception {
             running = false;
+            threadPool.shutdown();
             while (!buffer.isEmpty()) {
                 List<BufferEntry> entries = new ArrayList<>(batchSize);
                 buffer.drainTo(entries, batchSize);
@@ -194,8 +194,10 @@ public class OptimizedBatchIOJob {
             for (String redisKey : redisKeys) {
                 RFuture<Object> rFuture = batch.getBucket(redisKey).getAsync();
                 rFuture.whenComplete((res, ex) -> {
-                    Map<String, String> map = dimRedisSchema.parseInput(String.valueOf(res));
-                    resultLocalMap.put(redisKey, map);
+                    if (res != null && !resultLocalMap.containsKey(redisKey)) {
+                        Map<String, String> map = dimRedisSchema.parseInput(String.valueOf(res));
+                        resultLocalMap.put(redisKey, map);
+                    }
                 });
             }
 
@@ -209,11 +211,14 @@ public class OptimizedBatchIOJob {
                 results.add(bufferEntry.getSource());
             }
 
-            synchronized (collectorLock) {
+            collectorLock.lock();
+            try {
                 for (Map<String, String> map : results) {
                     //todo 根据JoinRule 来决定输出格式
                     out.collect(ArgUtil.mapToBeaconKV(map));
                 }
+            } finally {
+                collectorLock.unlock();
             }
         }
 
@@ -226,9 +231,11 @@ public class OptimizedBatchIOJob {
             for (String redisKey : redisKeys) {
                 RFuture<Map<Object, Object>> rFuture = batch.getMap(redisKey).readAllMapAsync();
                 rFuture.whenComplete((res, ex) -> {
-                    Map<String, String> map = dimRedisSchema.parseInput(res);
-                    //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
-                    resultLocalMap.put(redisKey, map);
+                    if (res != null && !resultLocalMap.containsKey(redisKey)) {
+                        Map<String, String> map = dimRedisSchema.parseInput(res);
+                        //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
+                        resultLocalMap.put(redisKey, map);
+                    }
                 });
             }
 
@@ -242,11 +249,14 @@ public class OptimizedBatchIOJob {
                 results.add(bufferEntry.getSource());
             }
 
-            synchronized (collectorLock) {
+            collectorLock.lock();
+            try {
                 for (Map<String, String> map : results) {
                     //todo 根据JoinRule 来决定输出格式
                     out.collect(ArgUtil.mapToBeaconKV(map));
                 }
+            } finally {
+                collectorLock.unlock();
             }
         }
 

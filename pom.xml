@@ -15,7 +15,7 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <package.scope>compile</package.scope>
+        <package.scope>provided</package.scope>
     </properties>
 
     <modules>

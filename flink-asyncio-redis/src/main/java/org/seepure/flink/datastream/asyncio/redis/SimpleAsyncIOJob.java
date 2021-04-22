@@ -40,7 +40,7 @@ public class SimpleAsyncIOJob {
         String arg = args != null && args.length >= 1 ? args[0] : defaultRedisHashJoinArg;
                 //"redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001";
         Map<String, String> configMap = ArgUtil.getArgMapFromArgs(arg);
-        configMap.put("redis.nodes", "192.168.234.137:7000,192.168.234.137:7001,192.168.234.138:7000,192.168.234.138:7001,192.168.234.134:7000,192.168.234.134:7001");
+        //configMap.put("redis.nodes", "192.168.234.137:7000,192.168.234.137:7001,192.168.234.138:7000,192.168.234.138:7001,192.168.234.134:7000,192.168.234.134:7001");
         ParameterTool params = ParameterTool.fromMap(configMap);
         long timeout = 1;
         StreamExecutionEnvironment env = getEnv(params);
