@@ -3,6 +3,7 @@ package org.seepure.flink.datastream.asyncio.redis;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -215,9 +216,9 @@ public class OptimizedBatchIOJob {
                     if (ex != null) {
                         LOG.error(ex.getMessage(), ex);
                     }
-                    if (res != null && !resultLocalMap.containsKey(redisKey)) { //cache nullable
+                    if (!resultLocalMap.containsKey(redisKey)) { //cache nullable
                         if (cache != null) {
-                            cache.put(redisKey, res);
+                            cache.put(redisKey, res == null ? "" : res);
                         }
                         Map<String, String> map = dimRedisSchema.parseInput(res);
                         resultLocalMap.put(redisKey, map);
@@ -255,9 +256,12 @@ public class OptimizedBatchIOJob {
             for (String redisKey : redisKeys) {
                 RFuture<Map<Object, Object>> rFuture = batch.getMap(redisKey).readAllMapAsync();
                 rFuture.whenComplete((res, ex) -> {
-                    if (res != null && !resultLocalMap.containsKey(redisKey)) {
-                        if (cache != null && !res.isEmpty()) {
-                            cache.put(redisKey, res);
+                    if (ex != null) {
+                        LOG.error(ex.getMessage(), ex);
+                    }
+                    if (!resultLocalMap.containsKey(redisKey)) {
+                        if (cache != null) {  //cache nullable
+                            cache.put(redisKey, res == null ? Collections.EMPTY_MAP : res);
                         }
                         Map<String, String> map = dimRedisSchema.parseInput(res);
                         //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出

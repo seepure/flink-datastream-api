@@ -3,6 +3,8 @@ package org.seepure.flink.datastream.asyncio.redis;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -207,8 +209,13 @@ public class SimpleBatchIOJob {
                     if (ex != null) {
                         LOG.error(ex.getMessage(), ex);
                     }
-                    if (cache != null && res != null) {
-                        cache.put(bufferEntry.getRedisKey(), res);
+                    if (cache != null) {
+//                    if (cache nullable) {
+//                        cache.put(redisKey, StringUtils.isBlank((String) o) ? "" : o);  //cache nullable
+//                    } else if (o != null) {
+//                        cache.put(redisKey, o);
+//                    }
+                        cache.put(bufferEntry.getRedisKey(), res == null ? "" : res);   //cache nullable
                     }
                     Map<String, String> map = dimRedisSchema.parseInput(res);
                     //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
@@ -239,8 +246,13 @@ public class SimpleBatchIOJob {
                     if (ex != null) {
                         LOG.error(ex.getMessage(), ex);
                     }
-                    if (cache != null && res != null && !res.isEmpty()) {
-                        cache.put(bufferEntry.getRedisKey(), res);
+                    if (cache != null /*&& res != null && !res.isEmpty()*/) { //cache nullable
+//                    if (cache nullable ) {
+//                        cache.put(redisKey, readAllMap == null ? Collections.EMPTY_MAP : readAllMap);
+//                    } else if (readAllMap != null && !readAllMap.isEmpty()) {
+//                        cache.put(redisKey, readAllMap);
+//                    }
+                        cache.put(bufferEntry.getRedisKey(), res == null ? Collections.EMPTY_MAP : res);
                     }
                     Map<String, String> map = dimRedisSchema.parseInput(res);
                     //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出

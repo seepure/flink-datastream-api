@@ -2,9 +2,13 @@ package org.seepure.flink.datastream.asyncio.redis;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.Configuration;
@@ -136,15 +140,25 @@ public class SimpleFlatMapJob {
             if (dimRedisSchema instanceof DimRedisHashSchema) {
                 RMap<Object, Object> rMap = client.getMap(redisKey);
                 Map<Object, Object> readAllMap = rMap.readAllMap();
-                if (cache != null && readAllMap != null && !readAllMap.isEmpty()) {
-                    cache.put(redisKey, readAllMap);
+                if (cache != null /* && readAllMap != null && !readAllMap.isEmpty()*/) { //cache nullable
+//                    if (cache nullable ) {
+//                        cache.put(redisKey, readAllMap == null ? Collections.EMPTY_MAP : readAllMap);
+//                    } else if (readAllMap != null && !readAllMap.isEmpty()) {
+//                        cache.put(redisKey, readAllMap);
+//                    }
+                    cache.put(redisKey, readAllMap == null ? Collections.EMPTY_MAP : readAllMap);
                 }
                 source.putAll(dimRedisSchema.parseInput(readAllMap));
             } else {
                 RBucket<Object> bucket = client.getBucket(redisKey);
                 Object o = bucket.get();
-                if (cache != null && o != null) {
-                    cache.put(redisKey, o);
+                if (cache != null) {
+//                    if (cache nullable) {
+//                        cache.put(redisKey, StringUtils.isBlank((String) o) ? "" : o);  //cache nullable
+//                    } else if (o != null) {
+//                        cache.put(redisKey, o);
+//                    }
+                    cache.put(redisKey, StringUtils.isBlank((String) o) ? "" : o);  //cache nullable
                 }
                 source.putAll(dimRedisSchema.parseInput(o));
             }
