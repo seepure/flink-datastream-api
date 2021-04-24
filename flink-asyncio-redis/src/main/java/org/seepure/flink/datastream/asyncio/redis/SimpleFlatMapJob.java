@@ -3,7 +3,6 @@ package org.seepure.flink.datastream.asyncio.redis;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
@@ -128,9 +127,6 @@ public class SimpleFlatMapJob {
             if (cache != null) {
                 Object cachedResult = cache.getIfPresent(redisKey);
                 if (cachedResult != null) {
-                    if (new Random().nextInt(10) < 3) {
-                        LOG.info("get result from cache");
-                    }
                     source.putAll(dimRedisSchema.parseInput(cachedResult));
                     out.collect(ArgUtil.mapToBeaconKV(source));
                     return;

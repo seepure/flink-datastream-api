@@ -1,5 +1,7 @@
 package org.seepure.flink.datastream.asyncio.redis;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -10,6 +12,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.collections.CollectionUtils;
@@ -25,6 +28,7 @@ import org.redisson.api.RBatch;
 import org.redisson.api.RFuture;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
+import org.seepure.flink.datastream.asyncio.redis.config.CachePolicy;
 import org.seepure.flink.datastream.asyncio.redis.config.DimRedisHashSchema;
 import org.seepure.flink.datastream.asyncio.redis.config.DimRedisSchema;
 import org.seepure.flink.datastream.asyncio.redis.config.JoinRule;
@@ -72,6 +76,7 @@ public class OptimizedBatchIOJob {
         private static final Logger LOG = LoggerFactory.getLogger(OptimizedRedisBatchFlatMap.class);
         private static final AtomicInteger REF_COUNTER = new AtomicInteger(0);
         private static volatile transient RedissonClient client;
+        private static volatile transient Cache<String, Object> cache;
         private transient ReentrantLock collectorLock;
         private volatile boolean running = true;
         private Map<String, String> configMap;
@@ -106,6 +111,17 @@ public class OptimizedBatchIOJob {
                     if (client == null) {
                         Config config = RedissonConfig.getRedissonConfig(configMap);
                         client = Redisson.create(config);
+                    }
+                }
+            }
+            if (cache == null) {
+                synchronized (OptimizedBatchIOJob.class) {
+                    if (cache == null) {
+                        CachePolicy cachePolicy = CachePolicy.getCachePolicy(configMap);
+                        if (cachePolicy != null) {
+                            cache = Caffeine.newBuilder().maximumSize(cachePolicy.getSize())
+                                    .expireAfterWrite(cachePolicy.getExpireAfterWrite(), TimeUnit.SECONDS).build();
+                        }
                     }
                 }
             }
@@ -159,14 +175,16 @@ public class OptimizedBatchIOJob {
             String sourceJoinColumnValue = source.get(sourceJoinColumnName);
             String redisKey = String.format(keyExpression, sourceJoinColumnValue);
             //1. deal with cache
-//            if (cached) {
-//                synchronized (collectorLock) {
-//                    out.collect(result from cache);
-//                }
-//                return;
-//            }
+            if (cache != null) {
+                Object cachedResult = cache.getIfPresent(redisKey);
+                if (cachedResult != null) {
+                    source.putAll(dimRedisSchema.parseInput(cachedResult));
+                    out.collect(ArgUtil.mapToBeaconKV(source));
+                    return;
+                }
+            }
 
-            //2. query redis
+            //2. buffering and then query redis
             BufferEntry bufferEntry = new BufferEntry(redisKey, input, source);
             buffer.put(bufferEntry);
         }
@@ -194,8 +212,14 @@ public class OptimizedBatchIOJob {
             for (String redisKey : redisKeys) {
                 RFuture<Object> rFuture = batch.getBucket(redisKey).getAsync();
                 rFuture.whenComplete((res, ex) -> {
-                    if (res != null && !resultLocalMap.containsKey(redisKey)) {
-                        Map<String, String> map = dimRedisSchema.parseInput(String.valueOf(res));
+                    if (ex != null) {
+                        LOG.error(ex.getMessage(), ex);
+                    }
+                    if (res != null && !resultLocalMap.containsKey(redisKey)) { //cache nullable
+                        if (cache != null) {
+                            cache.put(redisKey, res);
+                        }
+                        Map<String, String> map = dimRedisSchema.parseInput(res);
                         resultLocalMap.put(redisKey, map);
                     }
                 });
@@ -232,6 +256,9 @@ public class OptimizedBatchIOJob {
                 RFuture<Map<Object, Object>> rFuture = batch.getMap(redisKey).readAllMapAsync();
                 rFuture.whenComplete((res, ex) -> {
                     if (res != null && !resultLocalMap.containsKey(redisKey)) {
+                        if (cache != null && !res.isEmpty()) {
+                            cache.put(redisKey, res);
+                        }
                         Map<String, String> map = dimRedisSchema.parseInput(res);
                         //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
                         resultLocalMap.put(redisKey, map);
