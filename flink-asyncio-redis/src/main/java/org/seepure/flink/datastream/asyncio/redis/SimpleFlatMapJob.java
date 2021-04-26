@@ -2,13 +2,10 @@ package org.seepure.flink.datastream.asyncio.redis;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.Configuration;
@@ -31,6 +28,7 @@ import org.seepure.flink.datastream.asyncio.redis.sink.SimpleSinkFunction;
 import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomSource;
 import org.seepure.flink.datastream.asyncio.redis.util.ArgUtil;
 import org.seepure.flink.datastream.asyncio.redis.util.AssertUtil;
+import org.seepure.flink.datastream.asyncio.redis.util.MonitorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +40,7 @@ public class SimpleFlatMapJob {
                         + ";source.schema.type=MQ_KV;source.schema.content={};dim.schema.type=redis.kv_text;dim.schema.content={};joinRule.rightFields=tp_%s;cachePolicy.type=local;cachePolicy.expireAfterWrite=20;cachePolicy.size=200";
         String defaultRedisHashJoinArg =
                 "redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001"
-                        + ";source.schema.type=MQ_KV;source.schema.content={};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=th_%s;cachePolicy.type=local;cachePolicy.expireAfterWrite=20;cachePolicy.size=200";
+                        + ";source.schema.type=MQ_KV;source.schema.content={};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=kh_%s;cachePolicy.type=local;cachePolicy.expireAfterWrite=20;cachePolicy.size=200";
         String arg = args != null && args.length >= 1 ? args[0] : defaultRedisHashJoinArg;
         Map<String, String> configMap = ArgUtil.getArgMapFromArgs(arg);
         //configMap.put("redis.nodes", "redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001");
@@ -73,6 +71,7 @@ public class SimpleFlatMapJob {
         private SourceSchema sourceSchema;
         private DimRedisSchema dimRedisSchema;
         private JoinRule joinRule;
+        private CachePolicy cachePolicy;
 
         public SimpleRedisFlatMap(Map<String, String> configMap) {
             this.configMap = configMap;
@@ -87,21 +86,22 @@ public class SimpleFlatMapJob {
             dimRedisSchema = DimRedisSchema.getDimSchema(configMap);
             joinRule = JoinRule.parseJoinRule(configMap);
             if (client == null) {
-                synchronized (SimpleRedisFlatMap.class) {
+                synchronized (this.getClass()) {
                     if (client == null) {
                         Config config = RedissonConfig.getRedissonConfig(configMap);
                         client = Redisson.create(config);
                     }
                 }
             }
-            if (cache == null) {
-                synchronized (SimpleRedisFlatMap.class) {
+            cachePolicy = CachePolicy.getCachePolicy(configMap);
+            if (cachePolicy != null && cache == null) {
+                synchronized (this.getClass()) {
                     if (cache == null) {
-                        CachePolicy cachePolicy = CachePolicy.getCachePolicy(configMap);
-                        if (cachePolicy != null) {
-                            cache = Caffeine.newBuilder().maximumSize(cachePolicy.getSize())
-                                    .expireAfterWrite(cachePolicy.getExpireAfterWrite(), TimeUnit.SECONDS).build();
-                        }
+                        cache = Caffeine.newBuilder().maximumSize(cachePolicy.getSize())
+                                .expireAfterWrite(cachePolicy.getExpireAfterWrite(), TimeUnit.SECONDS).recordStats()
+                                .build();
+                        Thread cacheMonitorThread = MonitorUtil.createCacheMonitorThread(cache);
+                        cacheMonitorThread.start();
                     }
                 }
             }
@@ -111,6 +111,7 @@ public class SimpleFlatMapJob {
         public void close() throws Exception {
             int refCount = REF_COUNTER.decrementAndGet();
             if (refCount <= 0 && client != null) {
+                MonitorUtil.stop();
                 client.shutdown();
             }
             super.close();
@@ -140,25 +141,24 @@ public class SimpleFlatMapJob {
             if (dimRedisSchema instanceof DimRedisHashSchema) {
                 RMap<Object, Object> rMap = client.getMap(redisKey);
                 Map<Object, Object> readAllMap = rMap.readAllMap();
-                if (cache != null /* && readAllMap != null && !readAllMap.isEmpty()*/) { //cache nullable
-//                    if (cache nullable ) {
-//                        cache.put(redisKey, readAllMap == null ? Collections.EMPTY_MAP : readAllMap);
-//                    } else if (readAllMap != null && !readAllMap.isEmpty()) {
-//                        cache.put(redisKey, readAllMap);
-//                    }
-                    cache.put(redisKey, readAllMap == null ? Collections.EMPTY_MAP : readAllMap);
+                if (cache != null) {
+                    if (cachePolicy.isNullable()) {
+                        cache.put(redisKey,
+                                readAllMap == null || readAllMap.isEmpty() ? Collections.EMPTY_MAP : readAllMap);
+                    } else if (readAllMap != null && !readAllMap.isEmpty()) {
+                        cache.put(redisKey, readAllMap);
+                    }
                 }
                 source.putAll(dimRedisSchema.parseInput(readAllMap));
             } else {
-                RBucket<Object> bucket = client.getBucket(redisKey);
-                Object o = bucket.get();
+                RBucket<String> bucket = client.getBucket(redisKey);
+                String o = bucket.get();
                 if (cache != null) {
-//                    if (cache nullable) {
-//                        cache.put(redisKey, StringUtils.isBlank((String) o) ? "" : o);  //cache nullable
-//                    } else if (o != null) {
-//                        cache.put(redisKey, o);
-//                    }
-                    cache.put(redisKey, StringUtils.isBlank((String) o) ? "" : o);  //cache nullable
+                    if (cachePolicy.isNullable()) {
+                        cache.put(redisKey, o == null ? "" : o);  //cache nullable
+                    } else if (o != null) {
+                        cache.put(redisKey, o);
+                    }
                 }
                 source.putAll(dimRedisSchema.parseInput(o));
             }

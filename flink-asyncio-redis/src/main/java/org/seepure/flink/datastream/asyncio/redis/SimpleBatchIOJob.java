@@ -4,7 +4,6 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -37,6 +36,7 @@ import org.seepure.flink.datastream.asyncio.redis.sink.SimpleSinkFunction;
 import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomSource;
 import org.seepure.flink.datastream.asyncio.redis.util.ArgUtil;
 import org.seepure.flink.datastream.asyncio.redis.util.AssertUtil;
+import org.seepure.flink.datastream.asyncio.redis.util.MonitorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,6 +82,7 @@ public class SimpleBatchIOJob {
         private SourceSchema sourceSchema;
         private DimRedisSchema dimRedisSchema;
         private JoinRule joinRule;
+        private CachePolicy cachePolicy;
         private int batchSize;
         private long minBatchTime;
         private volatile long lastDoBufferTime;
@@ -102,25 +103,26 @@ public class SimpleBatchIOJob {
             sourceSchema = SourceSchema.getSourceSchema(configMap);
             dimRedisSchema = DimRedisSchema.getDimSchema(configMap);
             joinRule = JoinRule.parseJoinRule(configMap);
-            batchSize = Integer.parseInt(configMap.getOrDefault("batchSize", "1000"));
+            batchSize = Integer.parseInt(configMap.getOrDefault("batchSize", "2000"));
             minBatchTime = Integer.parseInt(configMap.getOrDefault("minBatchTime", "1000"));
             buffer = new LinkedBlockingQueue<>(batchSize + batchSize >> 1);
             if (client == null) {
-                synchronized (SimpleRedisBatchFlatMap.class) {
+                synchronized (this.getClass()) {
                     if (client == null) {
                         Config config = RedissonConfig.getRedissonConfig(configMap);
                         client = Redisson.create(config);
                     }
                 }
             }
-            if (cache == null) {
-                synchronized (SimpleRedisBatchFlatMap.class) {
+            cachePolicy = CachePolicy.getCachePolicy(configMap);
+            if (cachePolicy != null && cache == null) {
+                synchronized (this.getClass()) {
                     if (cache == null) {
-                        CachePolicy cachePolicy = CachePolicy.getCachePolicy(configMap);
-                        if (cachePolicy != null) {
-                            cache = Caffeine.newBuilder().maximumSize(cachePolicy.getSize())
-                                    .expireAfterWrite(cachePolicy.getExpireAfterWrite(), TimeUnit.SECONDS).build();
-                        }
+                        cache = Caffeine.newBuilder().maximumSize(cachePolicy.getSize())
+                                .expireAfterWrite(cachePolicy.getExpireAfterWrite(), TimeUnit.SECONDS).recordStats()
+                                .build();
+                        Thread cacheMonitorThread = MonitorUtil.createCacheMonitorThread(cache);
+                        cacheMonitorThread.start();
                     }
                 }
             }
@@ -157,6 +159,7 @@ public class SimpleBatchIOJob {
 
             int refCount = REF_COUNTER.decrementAndGet();
             if (refCount <= 0 && client != null) {
+                MonitorUtil.stop();
                 client.shutdown();
             }
         }
@@ -210,12 +213,11 @@ public class SimpleBatchIOJob {
                         LOG.error(ex.getMessage(), ex);
                     }
                     if (cache != null) {
-//                    if (cache nullable) {
-//                        cache.put(redisKey, StringUtils.isBlank((String) o) ? "" : o);  //cache nullable
-//                    } else if (o != null) {
-//                        cache.put(redisKey, o);
-//                    }
-                        cache.put(bufferEntry.getRedisKey(), res == null ? "" : res);   //cache nullable
+                        if (cachePolicy.isNullable()) {
+                            cache.put(bufferEntry.getRedisKey(), res == null ? "" : res);  //cache nullable
+                        } else if (res != null) {
+                            cache.put(bufferEntry.getRedisKey(), res);
+                        }
                     }
                     Map<String, String> map = dimRedisSchema.parseInput(res);
                     //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
@@ -246,13 +248,13 @@ public class SimpleBatchIOJob {
                     if (ex != null) {
                         LOG.error(ex.getMessage(), ex);
                     }
-                    if (cache != null /*&& res != null && !res.isEmpty()*/) { //cache nullable
-//                    if (cache nullable ) {
-//                        cache.put(redisKey, readAllMap == null ? Collections.EMPTY_MAP : readAllMap);
-//                    } else if (readAllMap != null && !readAllMap.isEmpty()) {
-//                        cache.put(redisKey, readAllMap);
-//                    }
-                        cache.put(bufferEntry.getRedisKey(), res == null ? Collections.EMPTY_MAP : res);
+                    if (cache != null) { //cache nullable
+                        if (cachePolicy.isNullable()) {
+                            cache.put(bufferEntry.getRedisKey(),
+                                    res == null || res.isEmpty() ? Collections.EMPTY_MAP : res);
+                        } else if (res != null && !res.isEmpty()) {
+                            cache.put(bufferEntry.getRedisKey(), res);
+                        }
                     }
                     Map<String, String> map = dimRedisSchema.parseInput(res);
                     //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出

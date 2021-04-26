@@ -1,18 +1,18 @@
 package org.seepure.flink.datastream.asyncio.redis.config;
 
+import java.io.Serializable;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
 import org.apache.commons.lang3.StringUtils;
 
-public class CachePolicy {
+public class CachePolicy implements Serializable {
 
-    public final static Object EMPTY_CACHE_RESULT = new Object();
     private String type;
     private int size;
     private boolean loadOnBeginning = false;
     //todo 支持nullable的缓存策略
-    private boolean nullable = false;
+    private boolean nullable;
     private long expireAfterWrite;
 
     public CachePolicy() {
@@ -40,6 +40,14 @@ public class CachePolicy {
 
     public void setLoadOnBeginning(boolean loadOnBeginning) {
         this.loadOnBeginning = loadOnBeginning;
+    }
+
+    public boolean isNullable() {
+        return nullable;
+    }
+
+    public void setNullable(boolean nullable) {
+        this.nullable = nullable;
     }
 
     public long getExpireAfterWrite() {
@@ -92,7 +100,8 @@ public class CachePolicy {
         }
 
         String loadOnBeginning = configMap.getOrDefault("cachePolicy.loadOnBeginning", "false");
-        String size = configMap.get("cachePolicy.size");
+        String nullable = configMap.getOrDefault("cachePolicy.nullable", "true");
+        String size = configMap.getOrDefault("cachePolicy.size", "20000");
 
         cachePolicy.setSize(Integer.parseInt(size));
         cachePolicy.setLoadOnBeginning(Boolean.getBoolean(loadOnBeginning));

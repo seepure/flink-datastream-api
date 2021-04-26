@@ -26,11 +26,11 @@ public class PressureRandomSource extends RichSourceFunction<String> {
         while (running) {
             int num = -1;
             int classNum = random.nextInt(100);
-            if (classNum < 20) {
+            if (classNum < 25) {
                 num = random.nextInt(bound / 100);
             } else if (classNum < 40) {
                 num = random.nextInt(bound * 5 / 100);
-            } else if (classNum < 60) {
+            } else if (classNum < 65) {
                 num = random.nextInt(bound / 10);
             } else if (classNum < 90) {
                 num = bound / 10 + random.nextInt(bound * 2 / 10);

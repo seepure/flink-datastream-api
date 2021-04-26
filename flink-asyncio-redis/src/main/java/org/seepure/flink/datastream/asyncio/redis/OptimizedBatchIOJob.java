@@ -39,6 +39,7 @@ import org.seepure.flink.datastream.asyncio.redis.sink.SimpleSinkFunction;
 import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomSource;
 import org.seepure.flink.datastream.asyncio.redis.util.ArgUtil;
 import org.seepure.flink.datastream.asyncio.redis.util.AssertUtil;
+import org.seepure.flink.datastream.asyncio.redis.util.MonitorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,7 +55,8 @@ public class OptimizedBatchIOJob {
         String arg = args != null && args.length >= 1 ? args[0] : defaultRedisStringJoinArg;
         //"redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001";
         Map<String, String> configMap = ArgUtil.getArgMapFromArgs(arg);
-        configMap.put("redis.nodes", "redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001");
+        configMap.put("redis.nodes",
+                "redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001");
         //configMap.put("redis.nodes", "redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001");
         ParameterTool params = ParameterTool.fromMap(configMap);
         StreamExecutionEnvironment env = getEnv(params);
@@ -84,6 +86,7 @@ public class OptimizedBatchIOJob {
         private SourceSchema sourceSchema;
         private DimRedisSchema dimRedisSchema;
         private JoinRule joinRule;
+        private CachePolicy cachePolicy;
         private int batchSize;
         private long minBatchTime;
         private volatile long lastDoBufferTime;
@@ -104,25 +107,26 @@ public class OptimizedBatchIOJob {
             sourceSchema = SourceSchema.getSourceSchema(configMap);
             dimRedisSchema = DimRedisSchema.getDimSchema(configMap);
             joinRule = JoinRule.parseJoinRule(configMap);
-            batchSize = Integer.parseInt(configMap.getOrDefault("batchSize", "1000"));
+            batchSize = Integer.parseInt(configMap.getOrDefault("batchSize", "2000"));
             minBatchTime = Integer.parseInt(configMap.getOrDefault("minBatchTime", "1000"));
             buffer = new LinkedBlockingQueue<>(batchSize + batchSize >> 1);
             if (client == null) {
-                synchronized (OptimizedRedisBatchFlatMap.class) {
+                synchronized (this.getClass()) {
                     if (client == null) {
                         Config config = RedissonConfig.getRedissonConfig(configMap);
                         client = Redisson.create(config);
                     }
                 }
             }
-            if (cache == null) {
-                synchronized (OptimizedBatchIOJob.class) {
+            cachePolicy = CachePolicy.getCachePolicy(configMap);
+            if (cachePolicy != null && cache == null) {
+                synchronized (this.getClass()) {
                     if (cache == null) {
-                        CachePolicy cachePolicy = CachePolicy.getCachePolicy(configMap);
-                        if (cachePolicy != null) {
-                            cache = Caffeine.newBuilder().maximumSize(cachePolicy.getSize())
-                                    .expireAfterWrite(cachePolicy.getExpireAfterWrite(), TimeUnit.SECONDS).build();
-                        }
+                        cache = Caffeine.newBuilder().maximumSize(cachePolicy.getSize())
+                                .expireAfterWrite(cachePolicy.getExpireAfterWrite(), TimeUnit.SECONDS).recordStats()
+                                .build();
+                        Thread cacheMonitorThread = MonitorUtil.createCacheMonitorThread(cache);
+                        cacheMonitorThread.start();
                     }
                 }
             }
@@ -159,6 +163,7 @@ public class OptimizedBatchIOJob {
 
             int refCount = REF_COUNTER.decrementAndGet();
             if (refCount <= 0 && client != null) {
+                MonitorUtil.stop();
                 client.shutdown();
             }
         }
@@ -218,7 +223,11 @@ public class OptimizedBatchIOJob {
                     }
                     if (!resultLocalMap.containsKey(redisKey)) { //cache nullable
                         if (cache != null) {
-                            cache.put(redisKey, res == null ? "" : res);
+                            if (cachePolicy.isNullable()) {
+                                cache.put(redisKey, res == null ? "" : res);  //cache nullable
+                            } else if (res != null) {
+                                cache.put(redisKey, res);
+                            }
                         }
                         Map<String, String> map = dimRedisSchema.parseInput(res);
                         resultLocalMap.put(redisKey, map);
@@ -261,7 +270,11 @@ public class OptimizedBatchIOJob {
                     }
                     if (!resultLocalMap.containsKey(redisKey)) {
                         if (cache != null) {  //cache nullable
-                            cache.put(redisKey, res == null ? Collections.EMPTY_MAP : res);
+                            if (cachePolicy.isNullable()) {
+                                cache.put(redisKey, res == null || res.isEmpty() ? Collections.EMPTY_MAP : res);
+                            } else if (res != null && !res.isEmpty()) {
+                                cache.put(redisKey, res);
+                            }
                         }
                         Map<String, String> map = dimRedisSchema.parseInput(res);
                         //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
