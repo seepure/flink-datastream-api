@@ -3,18 +3,20 @@ package org.seepure.flink.datastream.asyncio.redis.config;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.UnsupportedEncodingException;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.seepure.flink.datastream.asyncio.redis.util.AssertUtil;
 import org.seepure.flink.datastream.asyncio.redis.util.JsonUtil;
-
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class KvTextSourceSchema extends SourceSchema {
 
+    private final static Logger LOG = LoggerFactory.getLogger(KvTextSourceSchema.class);
     private String separator1;
     private String separator2;
     private String charset;
@@ -24,11 +26,22 @@ public class KvTextSourceSchema extends SourceSchema {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
         configContent = StringEscapeUtils.unescapeJson(configContent);
-        JsonNode jsonNode = objectMapper.readTree(configContent);
+        JsonNode jsonNode = null;
+        try {
+            jsonNode = objectMapper.readTree(configContent);
+        } catch (Exception e) {
+            LOG.warn(e.getMessage());
+        }
+        if (jsonNode == null) {
+            configContent = new String(Base64.getDecoder().decode(configContent.getBytes("UTF8")), "UTF8");
+            configContent = StringEscapeUtils.unescapeJson(configContent);
+            jsonNode = objectMapper.readTree(configContent);
+        }
         separator1 = JsonUtil.getStringOrDefault(jsonNode, "separator1", "|");
         separator2 = JsonUtil.getStringOrDefault(jsonNode, "separator2", "=");
-        charset = JsonUtil.getStringOrDefault(jsonNode, "charset", "UTF8");
-        AssertUtil.assertTrue(StringUtils.isNotBlank(separator1) && StringUtils.isNotBlank(separator2) && StringUtils.isNotBlank(charset),
+        charset = JsonUtil.getStringOrDefault(jsonNode, "encoding", "UTF8");
+        AssertUtil.assertTrue(StringUtils.isNotBlank(separator1) && StringUtils.isNotBlank(separator2) && StringUtils
+                        .isNotBlank(charset),
                 "Illegal config for KvTextSourceSchema");
     }
 

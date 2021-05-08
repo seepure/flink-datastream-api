@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 
 public class PressureRandomSource extends RichSourceFunction<String> {
 
-    private static Logger LOG = LoggerFactory.getLogger(SelfRandomSource.class);
+    private static Logger LOG = LoggerFactory.getLogger(PressureRandomSource.class);
 
     private volatile boolean running = true;
     private String keyColumn;

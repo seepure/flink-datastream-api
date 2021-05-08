@@ -36,7 +36,7 @@ import org.seepure.flink.datastream.asyncio.redis.config.JoinRule;
 import org.seepure.flink.datastream.asyncio.redis.config.RedissonConfig;
 import org.seepure.flink.datastream.asyncio.redis.config.SourceSchema;
 import org.seepure.flink.datastream.asyncio.redis.sink.SimpleSinkFunction;
-import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomSource;
+import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomKVSource;
 import org.seepure.flink.datastream.asyncio.redis.util.ArgUtil;
 import org.seepure.flink.datastream.asyncio.redis.util.AssertUtil;
 import org.seepure.flink.datastream.asyncio.redis.util.MonitorUtil;
@@ -60,7 +60,7 @@ public class OptimizedBatchIOJob {
         //configMap.put("redis.nodes", "redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001");
         ParameterTool params = ParameterTool.fromMap(configMap);
         StreamExecutionEnvironment env = getEnv(params);
-        DataStream<String> in = env.addSource(new SelfRandomSource("mykey", 10, 1000));
+        DataStream<String> in = env.addSource(new SelfRandomKVSource("mykey", 10, 1000));
         SingleOutputStreamOperator<String> stream = in.flatMap(new OptimizedRedisBatchFlatMap(configMap));
         stream.addSink(new SimpleSinkFunction());
         env.execute();
@@ -185,7 +185,12 @@ public class OptimizedBatchIOJob {
                 Object cachedResult = cache.getIfPresent(redisKey);
                 if (cachedResult != null) {
                     source.putAll(dimRedisSchema.parseInput(cachedResult));
-                    out.collect(ArgUtil.mapToBeaconKV(source));
+                    collectorLock.lock();
+                    try {
+                        out.collect(ArgUtil.mapToBeaconKV(source));
+                    } finally {
+                        collectorLock.unlock();
+                    }
                     return;
                 }
             }

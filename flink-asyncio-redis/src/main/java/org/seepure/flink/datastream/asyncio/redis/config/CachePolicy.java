@@ -82,16 +82,25 @@ public class CachePolicy implements Serializable {
     public static CachePolicy getCachePolicy(Map<String, String> configMap) {
         CachePolicy cachePolicy = new CachePolicy();
         String type = configMap.get("cachePolicy.type");
+        if (StringUtils.isBlank(type)) {
+            type = configMap.get("cacheType");
+        }
         if (!Objects.equals(type, "local")) {
             return null;
         }
         cachePolicy.setType(type);
         String expireAfterWrite = configMap.get("cachePolicy.expireAfterWrite");
+        if (StringUtils.isBlank(expireAfterWrite)) {
+            expireAfterWrite = configMap.get("cacheExpireAfterWrite");
+        }
         if (StringUtils.isNotBlank(expireAfterWrite)) {
             long ttl = Long.parseLong(expireAfterWrite);
             cachePolicy.setExpireAfterWrite(ttl);
         } else {
             String dimUpdateType = configMap.get("cachePolicy.dimUpdatePolicy");
+            if (StringUtils.isBlank(dimUpdateType)) {
+                dimUpdateType = configMap.get("cacheDimUpdatePolicy");
+            }
             CachePolicy.DimUpdatePolicy dimUpdatePolicy = DimUpdatePolicy.matches(dimUpdateType.toUpperCase());
             if (dimUpdatePolicy == null || dimUpdatePolicy == DimUpdatePolicy.RANDOM) {
                 return null;
@@ -99,12 +108,22 @@ public class CachePolicy implements Serializable {
             cachePolicy.setExpireAfterWrite(dimUpdatePolicy.expireDuration);
         }
 
-        String loadOnBeginning = configMap.getOrDefault("cachePolicy.loadOnBeginning", "false");
-        String nullable = configMap.getOrDefault("cachePolicy.nullable", "true");
-        String size = configMap.getOrDefault("cachePolicy.size", "20000");
+        String loadOnBeginning = configMap.get("cachePolicy.loadOnBeginning");
+        if (StringUtils.isBlank(loadOnBeginning)) {
+            loadOnBeginning = configMap.getOrDefault("cacheLoadOnBeginning", "false");
+        }
+        String nullable = configMap.get("cachePolicy.nullable");
+        if (StringUtils.isBlank(nullable)) {
+            nullable = configMap.getOrDefault("cacheNullable", "true");
+        }
+        String size = configMap.get("cachePolicy.size");
+        if (StringUtils.isBlank(size)) {
+            size = configMap.getOrDefault("cacheSize", "20000");
+        }
 
         cachePolicy.setSize(Integer.parseInt(size));
         cachePolicy.setLoadOnBeginning(Boolean.getBoolean(loadOnBeginning));
+        cachePolicy.setNullable(Boolean.getBoolean(nullable));
         return cachePolicy;
     }
 

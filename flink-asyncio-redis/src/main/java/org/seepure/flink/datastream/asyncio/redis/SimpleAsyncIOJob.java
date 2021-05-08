@@ -21,7 +21,7 @@ import org.seepure.flink.datastream.asyncio.redis.config.JoinRule;
 import org.seepure.flink.datastream.asyncio.redis.config.RedissonConfig;
 import org.seepure.flink.datastream.asyncio.redis.config.SourceSchema;
 import org.seepure.flink.datastream.asyncio.redis.sink.SimpleSinkFunction;
-import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomSource;
+import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomKVSource;
 import org.seepure.flink.datastream.asyncio.redis.util.ArgUtil;
 
 import java.util.Collections;
@@ -44,7 +44,7 @@ public class SimpleAsyncIOJob {
         ParameterTool params = ParameterTool.fromMap(configMap);
         long timeout = 1;
         StreamExecutionEnvironment env = getEnv(params);
-        DataStream<String> in = env.addSource(new SelfRandomSource("mykey", 10, 1000));
+        DataStream<String> in = env.addSource(new SelfRandomKVSource("mykey", 10, 1000));
         SingleOutputStreamOperator<String> stream = AsyncDataStream
                 .unorderedWait(in, new SimpleRedisAsyncFunction(), timeout * 2, TimeUnit.SECONDS, 20);
         //stream.print();

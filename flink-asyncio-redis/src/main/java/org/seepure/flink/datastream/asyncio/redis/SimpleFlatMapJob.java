@@ -25,7 +25,7 @@ import org.seepure.flink.datastream.asyncio.redis.config.JoinRule;
 import org.seepure.flink.datastream.asyncio.redis.config.RedissonConfig;
 import org.seepure.flink.datastream.asyncio.redis.config.SourceSchema;
 import org.seepure.flink.datastream.asyncio.redis.sink.SimpleSinkFunction;
-import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomSource;
+import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomTextSource;
 import org.seepure.flink.datastream.asyncio.redis.util.ArgUtil;
 import org.seepure.flink.datastream.asyncio.redis.util.AssertUtil;
 import org.seepure.flink.datastream.asyncio.redis.util.MonitorUtil;
@@ -40,14 +40,15 @@ public class SimpleFlatMapJob {
                         + ";source.schema.type=MQ_KV;source.schema.content={};dim.schema.type=redis.kv_text;dim.schema.content={};joinRule.rightFields=tp_%s;cachePolicy.type=local;cachePolicy.expireAfterWrite=20;cachePolicy.size=200";
         String defaultRedisHashJoinArg =
                 "redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001"
-                        + ";source.schema.type=MQ_KV;source.schema.content={};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=kh_%s;cachePolicy.type=local;cachePolicy.expireAfterWrite=20;cachePolicy.size=200";
+                        + ";source.schema.type=MQ_TEXT;source.schema.content={\"sourceType\":\"ATTA\",\"contentType\":\"MQ_TEXT\",\"encoding\":\"UTF-8\",\"separator\":\"|\",\"peekQps\":1,\"maxStorageAday\":3,\"schema\":[{\"fieldKey\":\"userId\",\"fieldName\":\"用户id\",\"fieldType\":1,\"fieldIndex\":0},{\"fieldKey\":\"age\",\"fieldName\":\"年龄\",\"fieldType\":1,\"fieldIndex\":1},{\"fieldKey\":\"country\",\"fieldName\":\"国家\",\"fieldType\":1,\"fieldIndex\":2}],\"metadataId\":100};"
+                        + "dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=kh_%s;joinRule.leftFields=userId;cachePolicy.type=local;cachePolicy.expireAfterWrite=20;cachePolicy.size=200";
         String arg = args != null && args.length >= 1 ? args[0] : defaultRedisHashJoinArg;
         Map<String, String> configMap = ArgUtil.getArgMapFromArgs(arg);
         //configMap.put("redis.nodes", "redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001");
         //configMap.put("redis.nodes", "redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001");
         ParameterTool params = ParameterTool.fromMap(configMap);
         StreamExecutionEnvironment env = getEnv(params);
-        DataStream<String> in = env.addSource(new SelfRandomSource("mykey", 10, 1000));
+        DataStream<String> in = env.addSource(new SelfRandomTextSource("mykey", 10, 1000));
         SingleOutputStreamOperator<String> stream = in.flatMap(new SimpleRedisFlatMap(configMap));
         stream.addSink(new SimpleSinkFunction());
         env.execute();

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
+import org.seepure.flink.datastream.asyncio.redis.util.AssertUtil;
 
 public abstract class DimRedisSchema<IN> implements Serializable /*implements DeserializationSchema<Map<String, String>>*/ {
 
@@ -12,6 +13,7 @@ public abstract class DimRedisSchema<IN> implements Serializable /*implements De
         if (StringUtils.isBlank(type)) {
             type = configMap.get("dataSchema");
         }
+        AssertUtil.assertTrue(StringUtils.isNotBlank(type), "dim.schema.type/dataSchema is empty.");
         String schemaContent = configMap.get("dim.schema.content");
         if (StringUtils.isBlank(schemaContent)) {
             schemaContent = configMap.getOrDefault("dataSchemaDesc", "{}");

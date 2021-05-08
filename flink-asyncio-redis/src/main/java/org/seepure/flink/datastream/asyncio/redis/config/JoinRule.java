@@ -1,12 +1,12 @@
 package org.seepure.flink.datastream.asyncio.redis.config;
 
-import akka.actor.FSM.$minus$greater$;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.Serializable;
-import org.apache.commons.lang3.StringUtils;
-
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import org.apache.commons.lang3.StringUtils;
 
 public class JoinRule implements Serializable {
     private String type;
@@ -17,18 +17,35 @@ public class JoinRule implements Serializable {
 
     public static JoinRule parseJoinRule(Map<String, String> configMap) {
         JoinRule joinRule = new JoinRule();
-        joinRule.type = configMap.getOrDefault("joinRule.type", "full_join");
-        String leftString = configMap.getOrDefault("joinRule.leftFields", "mykey");
+        joinRule.type = configMap.get("joinRule.type");
+        if (StringUtils.isBlank(joinRule.type)) {
+            joinRule.type = configMap.getOrDefault("joinRuleType", "full_join");
+        }
+        String leftString = configMap.get("joinRule.leftFields");
+        if (StringUtils.isBlank(leftString)) {
+            leftString = configMap.get("joinRuleLeftFields");
+        }
         String rightString = configMap.get("joinRule.rightFields");
-        String leftOutputString = configMap.get("joinRule.leftOutputFields");
-        String rightOutputString = configMap.get("joinRule.rightOutputFields");
+        if (StringUtils.isBlank(rightString)) {
+            rightString = configMap.get("joinRuleRightFields");
+        }
         if (StringUtils.isBlank(leftString) || StringUtils.isBlank(rightString)) {
-            throw new IllegalArgumentException("parseJoinRule error!");
+            ObjectMapper objectMapper = new ObjectMapper();
+            String configMapString = null;
+            try {
+                configMapString = objectMapper.writeValueAsString(configMap);
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
+            if (StringUtils.isBlank(configMapString)) {
+                configMapString = String.valueOf(configMap);
+            }
+            throw new IllegalArgumentException(
+                    "parseJoinRule error! leftString=[" + leftString + "], rightString=[" + rightString
+                            + "], configMap: " + configMapString);
         }
         joinRule.leftFields = Arrays.asList(leftString.trim().split(","));
         joinRule.rightFields = Arrays.asList(rightString.trim().split(","));
-        joinRule.leftOutputFields = leftOutputString != null ? Arrays.asList(leftOutputString.trim().split(",")) : null;
-        joinRule.rightOutputFields = rightOutputString != null ? Arrays.asList(rightOutputString.trim().split(",")) : null;
         return joinRule;
     }
 

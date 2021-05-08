@@ -1,0 +1,19 @@
+package org.seepure.flink.datastream.asyncio.redis.config;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
+import org.junit.Test;
+
+public class MQTextSourceSchemaTest {
+
+    @Test
+    public void test() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        String msg = "2021-04-28 12:02:19.955|a=9.22.7.99&extinfo=9.22.7.99|31626064159aa|39666748612|collect||||||||||||||||testa|001|A|0|123.123|http://test.datahubweb.wsd.com/config?type=testa|http://test.datahubweb.wsd.com/config?type=testa&product_id=001|{\"param\":{\"platform\":\"Android\",\"sub_tab_info\":[{\"product_id\":\"001\",\"product_name\":\"testa\",\"product_price\":123.123}]}}|product_id_kv=001#product_name_kv=testa#product_price_kv=123.123|001#testa#A";
+        MQTextSourceSchema sourceSchema = new MQTextSourceSchema();
+        sourceSchema.parseConfig("eyJlbmNvZGluZyI6IlVURi04Iiwic2VwYXJhdG9yIjoifCIsInNjaGVtYSI6W3siZmllbGRLZXkiOiJmdGltZSIsImZpZWxkSW5kZXgiOjB9LHsiZmllbGRLZXkiOiJleHRpbmZvIiwiZmllbGRJbmRleCI6MX0seyJmaWVsZEtleSI6InVpbiIsImZpZWxkSW5kZXgiOjJ9LHsiZmllbGRLZXkiOiJvcmRlcl9pZCIsImZpZWxkSW5kZXgiOjN9LHsiZmllbGRLZXkiOiJvcmRlcl9hY3Rpb24iLCJmaWVsZEluZGV4Ijo0fSx7ImZpZWxkS2V5Ijoib3JkZXJfY29tbWVudCIsImZpZWxkSW5kZXgiOjV9LHsiZmllbGRLZXkiOiJvcmRlcl90aW1lX3l5eXkiLCJmaWVsZEluZGV4Ijo2fSx7ImZpZWxkS2V5Ijoib3JkZXJfdGltZV95eXl5TU0iLCJmaWVsZEluZGV4Ijo3fSx7ImZpZWxkS2V5Ijoib3JkZXJfdGltZV95eXl5TU1kZCIsImZpZWxkSW5kZXgiOjh9LHsiZmllbGRLZXkiOiJvcmRlcl90aW1lX3l5eXlNTWRkSEgiLCJmaWVsZEluZGV4Ijo5fSx7ImZpZWxkS2V5Ijoib3JkZXJfdGltZV95eXl5TU1kZEhIbW0iLCJmaWVsZEluZGV4IjoxMH0seyJmaWVsZEtleSI6Im9yZGVyX3RpbWVfeXl5eU1NZGRISG1tc3MiLCJmaWVsZEluZGV4IjoxMX0seyJmaWVsZEtleSI6InBheV90aW1lX3l5eXkiLCJmaWVsZEluZGV4IjoxMn0seyJmaWVsZEtleSI6InBheV90aW1lX3l5eXlNTSIsImZpZWxkSW5kZXgiOjEzfSx7ImZpZWxkS2V5IjoicGF5X3RpbWVfeXl5eU1NZGQiLCJmaWVsZEluZGV4IjoxNH0seyJmaWVsZEtleSI6InBheV90aW1lX3l5eXlNTWRkSEgiLCJmaWVsZEluZGV4IjoxNX0seyJmaWVsZEtleSI6InBheV90aW1lX3l5eXlNTWRkSEhtbSIsImZpZWxkSW5kZXgiOjE2fSx7ImZpZWxkS2V5IjoicGF5X3RpbWVfeXl5eU1NZGRISG1tc3MiLCJmaWVsZEluZGV4IjoxN30seyJmaWVsZEtleSI6InBheV90aW1lX3RpbWVzdGFtcCIsImZpZWxkSW5kZXgiOjE4fSx7ImZpZWxkS2V5IjoicGF5X3RpbWVfdGltZXN0YW1wbXMiLCJmaWVsZEluZGV4IjoxOX0seyJmaWVsZEtleSI6InByb2R1Y3RfbmFtZSIsImZpZWxkSW5kZXgiOjIwfSx7ImZpZWxkS2V5IjoicHJvZHVjdF9pZCIsImZpZWxkSW5kZXgiOjIxfSx7ImZpZWxkS2V5IjoicHJvZHVjdF9zb3J0IiwiZmllbGRJbmRleCI6MjJ9LHsiZmllbGRLZXkiOiJwcm9kdWN0X2NvbGxlY3QiLCJmaWVsZEluZGV4IjoyM30seyJmaWVsZEtleSI6InByb2R1Y3RfcHJpY2UiLCJmaWVsZEluZGV4IjoyNH0seyJmaWVsZEtleSI6InByb2R1Y3RfdXJsIiwiZmllbGRJbmRleCI6MjV9LHsiZmllbGRLZXkiOiJwcm9kdWN0X3VybF9lbmNvZGUiLCJmaWVsZEluZGV4IjoyNn0seyJmaWVsZEtleSI6InByb2R1Y3RfanNvbiIsImZpZWxkSW5kZXgiOjI3fSx7ImZpZWxkS2V5IjoicHJvZHVjdF9rdiIsImZpZWxkSW5kZXgiOjI4fSx7ImZpZWxkS2V5IjoicHJvZHVjdF9hcnJheSIsImZpZWxkSW5kZXgiOjI5fV19");
+        Map<String, String> map = sourceSchema.parseInput(msg);
+        System.out.println(objectMapper.writeValueAsString(map));
+    }
+
+}
