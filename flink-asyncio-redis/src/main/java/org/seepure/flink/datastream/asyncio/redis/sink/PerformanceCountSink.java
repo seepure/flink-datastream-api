@@ -12,6 +12,7 @@ public class PerformanceCountSink extends RichSinkFunction<String> {
     private long lastTime;
     private Thread thread;
     private volatile boolean running = true;
+    private volatile String msg;
 
     @Override
     public void open(Configuration parameters) throws Exception {
@@ -25,6 +26,8 @@ public class PerformanceCountSink extends RichSinkFunction<String> {
                     LOG.info("processed " + acl.get() + " msg(s) in last 10s.");
                     lastTime = now;
                     acl.set(0);
+                    LOG.info("msg: " + msg);
+                    msg = null;
                 }
                 try {
                     Thread.sleep(10);
@@ -45,5 +48,8 @@ public class PerformanceCountSink extends RichSinkFunction<String> {
     @Override
     public void invoke(String value, Context context) throws Exception {
         acl.incrementAndGet();
+        if (msg == null) {
+            msg = value;
+        }
     }
 }

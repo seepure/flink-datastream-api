@@ -122,8 +122,8 @@ public class CachePolicy implements Serializable {
         }
 
         cachePolicy.setSize(Integer.parseInt(size));
-        cachePolicy.setLoadOnBeginning(Boolean.getBoolean(loadOnBeginning));
-        cachePolicy.setNullable(Boolean.getBoolean(nullable));
+        cachePolicy.setLoadOnBeginning(Boolean.parseBoolean(loadOnBeginning));
+        cachePolicy.setNullable(Boolean.parseBoolean(nullable));
         return cachePolicy;
     }
 

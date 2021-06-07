@@ -1,11 +1,12 @@
 package org.seepure.flink.datastream.asyncio.redis.source;
 
 import java.util.Random;
+import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class PressureRandomSource extends RichSourceFunction<String> {
+public class PressureRandomSource extends RichParallelSourceFunction<String> {
 
     private static Logger LOG = LoggerFactory.getLogger(PressureRandomSource.class);
 
@@ -37,7 +38,8 @@ public class PressureRandomSource extends RichSourceFunction<String> {
             } else {
                 num = bound * (1 + 2) / 10 + random.nextInt(bound * 7 / 10);
             }
-            String msg = keyColumn + "=" + num;
+            //String msg = keyColumn + "=" + num;
+            String msg = num + "|" + random.nextInt(100) + "|" + "CN";
             ctx.collect(msg);
         }
     }

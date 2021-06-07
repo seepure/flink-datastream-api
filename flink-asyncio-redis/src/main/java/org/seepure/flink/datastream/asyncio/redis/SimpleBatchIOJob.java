@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.Configuration;
@@ -32,7 +33,9 @@ import org.seepure.flink.datastream.asyncio.redis.config.DimRedisSchema;
 import org.seepure.flink.datastream.asyncio.redis.config.JoinRule;
 import org.seepure.flink.datastream.asyncio.redis.config.RedissonConfig;
 import org.seepure.flink.datastream.asyncio.redis.config.SourceSchema;
+import org.seepure.flink.datastream.asyncio.redis.sink.PerformanceCountSink;
 import org.seepure.flink.datastream.asyncio.redis.sink.SimpleSinkFunction;
+import org.seepure.flink.datastream.asyncio.redis.source.PressureRandomSource;
 import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomKVSource;
 import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomTextSource;
 import org.seepure.flink.datastream.asyncio.redis.util.ArgUtil;
@@ -47,10 +50,11 @@ public class SimpleBatchIOJob {
         String defaultRedisStringJoinArg =
                 "redis.mode=cluster;redis.nodes=redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001"
                         + ";source.schema.type=MQ_KV;source.schema.content={};dim.schema.type=redis.kv_text;dim.schema.content={};joinRule.rightFields=tp_%s";
-        String defaultRedisHashJoinArg =
-                "redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001"
-                        + ";source.schema.type=MQ_TEXT;source.schema.content={\"sourceType\":\"ATTA\",\"contentType\":\"MQ_TEXT\",\"encoding\":\"UTF-8\",\"separator\":\"|\",\"peekQps\":1,\"maxStorageAday\":3,\"schema\":[{\"fieldKey\":\"userId\",\"fieldName\":\"用户id\",\"fieldType\":1,\"fieldIndex\":0},{\"fieldKey\":\"age\",\"fieldName\":\"年龄\",\"fieldType\":1,\"fieldIndex\":1},{\"fieldKey\":\"country\",\"fieldName\":\"国家\",\"fieldType\":1,\"fieldIndex\":2}],\"metadataId\":100};"
-                        + "dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=bh_%s;joinRule.leftFields=userId;cachePolicy.type=local;cachePolicy.expireAfterWrite=20;cachePolicy.size=200";
+//        String defaultRedisHashJoinArg =
+//                "redis.mode=cluster;redis.nodes=redis://192.168.234.139:7000,redis://192.168.234.139:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001"
+//                        + ";source.schema.type=MQ_TEXT;source.schema.content={\"sourceType\":\"ATTA\",\"contentType\":\"MQ_TEXT\",\"encoding\":\"UTF-8\",\"separator\":\"|\",\"peekQps\":1,\"maxStorageAday\":3,\"schema\":[{\"fieldKey\":\"userId\",\"fieldName\":\"用户id\",\"fieldType\":1,\"fieldIndex\":0},{\"fieldKey\":\"age\",\"fieldName\":\"年龄\",\"fieldType\":1,\"fieldIndex\":1},{\"fieldKey\":\"country\",\"fieldName\":\"国家\",\"fieldType\":1,\"fieldIndex\":2}],\"metadataId\":100};"
+//                        + "dim.schema.type=redis.hash;dim.schema.content={};joinRule.type=left_join;joinRule.rightFields=bh_%s;joinRule.leftFields=userId;cachePolicy.type=local;cachePolicy.expireAfterWrite=50;cachePolicy.size=200";
+        String defaultRedisHashJoinArg = "redis.mode=cluster;redis.nodes=9.146.159.128:6379;source.schema.type=MQ_TEXT;source.schema.content={\"sourceType\":\"ATTA\",\"contentType\":\"MQ_TEXT\",\"encoding\":\"UTF-8\",\"separator\":\"|\",\"peekQps\":1,\"maxStorageAday\":3,\"schema\":[{\"fieldKey\":\"userId\",\"fieldName\":\"用户id\",\"fieldType\":1,\"fieldIndex\":0},{\"fieldKey\":\"age\",\"fieldName\":\"年龄\",\"fieldType\":1,\"fieldIndex\":1},{\"fieldKey\":\"country\",\"fieldName\":\"国家\",\"fieldType\":1,\"fieldIndex\":2}],\"metadataId\":100};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=bh_%s;joinRule.leftFields=userId";
         String arg = args != null && args.length >= 1 ? args[0] : defaultRedisHashJoinArg;
         //"redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001";
         Map<String, String> configMap = ArgUtil.getArgMapFromArgs(arg);
@@ -58,9 +62,9 @@ public class SimpleBatchIOJob {
         //configMap.put("redis.nodes", "redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001");
         ParameterTool params = ParameterTool.fromMap(configMap);
         StreamExecutionEnvironment env = getEnv(params);
-        DataStream<String> in = env.addSource(new SelfRandomTextSource("mykey", 10, 1000));
+        DataStream<String> in = env.addSource(new PressureRandomSource("mykey", 1_000_000, 1000));
         SingleOutputStreamOperator<String> stream = in.flatMap(new SimpleRedisBatchFlatMap(configMap));
-        stream.addSink(new SimpleSinkFunction());
+        stream.addSink(new PerformanceCountSink());
         env.execute();
     }
 
@@ -68,7 +72,8 @@ public class SimpleBatchIOJob {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.getConfig().setGlobalJobParameters(params);
         env.getConfig().enableObjectReuse();
-        env.setParallelism(1);
+        int parallel = Integer.parseInt(params.get("parallel", "1"));
+        env.setParallelism(parallel);
         return env;
     }
 
@@ -182,6 +187,10 @@ public class SimpleBatchIOJob {
             if (cache != null) {
                 Object cachedResult = cache.getIfPresent(redisKey);
                 if (cachedResult != null) {
+                    if (JoinRule.INNER_JOIN_TYPE.equalsIgnoreCase(joinRule.getType())
+                            && isNullResult(cachedResult)) {
+                        return;
+                    }
                     source.putAll(dimRedisSchema.parseInput(cachedResult));
                     collectorLock.lock();
                     try {
@@ -226,10 +235,12 @@ public class SimpleBatchIOJob {
                             cache.put(bufferEntry.getRedisKey(), res);
                         }
                     }
-                    Map<String, String> map = dimRedisSchema.parseInput(res);
-                    //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
-                    bufferEntry.getSource().putAll(map);
-                    results.add(bufferEntry.getSource());
+                    if (res != null || !JoinRule.INNER_JOIN_TYPE.equalsIgnoreCase(joinRule.getType())) {
+                        Map<String, String> map = dimRedisSchema.parseInput(res);
+                        //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
+                        bufferEntry.getSource().putAll(map);
+                        results.add(bufferEntry.getSource());
+                    }
 
                 });
             }
@@ -263,10 +274,12 @@ public class SimpleBatchIOJob {
                             cache.put(bufferEntry.getRedisKey(), res);
                         }
                     }
-                    Map<String, String> map = dimRedisSchema.parseInput(res);
-                    //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
-                    bufferEntry.getSource().putAll(map);
-                    results.add(bufferEntry.getSource());
+                    if ((res != null && !res.isEmpty()) || !JoinRule.INNER_JOIN_TYPE.equalsIgnoreCase(joinRule.getType())) {
+                        Map<String, String> map = dimRedisSchema.parseInput(res);
+                        //todo 根据JoinRule决定要输出哪些字段, 当前把所有的字段都输出
+                        bufferEntry.getSource().putAll(map);
+                        results.add(bufferEntry.getSource());
+                    }
                 });
             }
             batch.execute();
@@ -279,6 +292,18 @@ public class SimpleBatchIOJob {
             } finally {
                 collectorLock.unlock();
             }
+        }
+
+        private boolean isNullResult(Object cacheResult) {
+            if (cacheResult == null) {
+                return true;
+            }
+            if (cacheResult instanceof String) {
+                return StringUtils.isBlank((String) cacheResult);
+            } else if (cacheResult instanceof Map) {
+                return ((Map) cacheResult).isEmpty();
+            }
+            return true;
         }
 
         private static class BufferEntry {

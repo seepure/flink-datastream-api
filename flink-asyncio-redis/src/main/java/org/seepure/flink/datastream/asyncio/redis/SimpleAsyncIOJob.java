@@ -20,7 +20,9 @@ import org.seepure.flink.datastream.asyncio.redis.config.DimRedisSchema;
 import org.seepure.flink.datastream.asyncio.redis.config.JoinRule;
 import org.seepure.flink.datastream.asyncio.redis.config.RedissonConfig;
 import org.seepure.flink.datastream.asyncio.redis.config.SourceSchema;
+import org.seepure.flink.datastream.asyncio.redis.sink.PerformanceCountSink;
 import org.seepure.flink.datastream.asyncio.redis.sink.SimpleSinkFunction;
+import org.seepure.flink.datastream.asyncio.redis.source.PressureRandomSource;
 import org.seepure.flink.datastream.asyncio.redis.source.SelfRandomKVSource;
 import org.seepure.flink.datastream.asyncio.redis.util.ArgUtil;
 
@@ -44,11 +46,11 @@ public class SimpleAsyncIOJob {
         ParameterTool params = ParameterTool.fromMap(configMap);
         long timeout = 1;
         StreamExecutionEnvironment env = getEnv(params);
-        DataStream<String> in = env.addSource(new SelfRandomKVSource("mykey", 10, 1000));
+        DataStream<String> in = env.addSource(new PressureRandomSource("mykey", 1_000_000, 1000));
         SingleOutputStreamOperator<String> stream = AsyncDataStream
-                .unorderedWait(in, new SimpleRedisAsyncFunction(), timeout * 2, TimeUnit.SECONDS, 20);
+                .unorderedWait(in, new SimpleRedisAsyncFunction(), timeout * 2, TimeUnit.SECONDS, 200);
         //stream.print();
-        stream.addSink(new SimpleSinkFunction());
+        stream.addSink(new PerformanceCountSink());
 
           //The operator for AsyncFunction (AsyncWaitOperator) must currently be at the head of operator chains for consistency reasons
         //For the reasons given in issue FLINK-13063, we currently must break operator chains for the AsyncWaitOperator to prevent potential consistency problems.
@@ -85,7 +87,8 @@ public class SimpleAsyncIOJob {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.getConfig().setGlobalJobParameters(params);
         env.getConfig().enableObjectReuse();
-        env.setParallelism(1);
+        int parallel = Integer.parseInt(params.get("parallel", "1"));
+        env.setParallelism(parallel);
         return env;
     }
 

@@ -9,17 +9,20 @@ import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
 
 public class JoinRule implements Serializable {
+    public static final String LEFT_JOIN_TYPE = "left_join";
+    public static final String INNER_JOIN_TYPE = "inner_join";
     private String type;
     private List<String> leftFields;
     private List<String> rightFields;
-    private List<String> leftOutputFields;
-    private List<String> rightOutputFields;
 
     public static JoinRule parseJoinRule(Map<String, String> configMap) {
         JoinRule joinRule = new JoinRule();
         joinRule.type = configMap.get("joinRule.type");
         if (StringUtils.isBlank(joinRule.type)) {
-            joinRule.type = configMap.getOrDefault("joinRuleType", "full_join");
+            joinRule.type = configMap.getOrDefault("joinRuleType", LEFT_JOIN_TYPE);
+        }
+        if (!LEFT_JOIN_TYPE.equalsIgnoreCase(joinRule.type) && !INNER_JOIN_TYPE.equalsIgnoreCase(joinRule.type)) {
+            throw new IllegalArgumentException("joinRuleType/joinRule.type is illegal, value=" + joinRule.type);
         }
         String leftString = configMap.get("joinRule.leftFields");
         if (StringUtils.isBlank(leftString)) {
@@ -69,19 +72,4 @@ public class JoinRule implements Serializable {
         this.rightFields = rightFields;
     }
 
-    public List<String> getLeftOutputFields() {
-        return leftOutputFields;
-    }
-
-    public void setLeftOutputFields(List<String> leftOutputFields) {
-        this.leftOutputFields = leftOutputFields;
-    }
-
-    public List<String> getRightOutputFields() {
-        return rightOutputFields;
-    }
-
-    public void setRightOutputFields(List<String> rightOutputFields) {
-        this.rightOutputFields = rightOutputFields;
-    }
 }
