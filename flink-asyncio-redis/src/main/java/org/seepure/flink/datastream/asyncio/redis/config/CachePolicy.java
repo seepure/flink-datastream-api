@@ -18,65 +18,23 @@ public class CachePolicy implements Serializable {
     public CachePolicy() {
     }
 
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
-    public int getSize() {
-        return size;
-    }
-
-    public void setSize(int size) {
-        this.size = size;
-    }
-
-    public boolean isLoadOnBeginning() {
-        return loadOnBeginning;
-    }
-
-    public void setLoadOnBeginning(boolean loadOnBeginning) {
-        this.loadOnBeginning = loadOnBeginning;
-    }
-
-    public boolean isNullable() {
-        return nullable;
-    }
-
-    public void setNullable(boolean nullable) {
-        this.nullable = nullable;
-    }
-
-    public long getExpireAfterWrite() {
-        return expireAfterWrite;
-    }
-
-    public void setExpireAfterWrite(long expireAfterWrite) {
-        this.expireAfterWrite = expireAfterWrite;
-    }
-
-    public enum DimUpdatePolicy {
-        MINUTE(15, 15),
-        HOUR(300, 300),
-        DAY(1800, 1800),
-        RANDOM(-1, -1)
-        ;
-
-        public final int expireDuration;
-        public final int refreshDuration;
-
-        DimUpdatePolicy(int expireDuration, int refreshDuration) {
-            this.expireDuration = expireDuration;
-            this.refreshDuration = refreshDuration;
+    public static CachePolicy getCachePolicy(RedisJoinConfig config) {
+        if (config == null) {
+            return null;
         }
-
-        public static DimUpdatePolicy matches(String name) {
-            return Stream.of(DimUpdatePolicy.values())
-                    .filter(e -> Objects.equals(e.name(), name)).findAny().orElse(null);
+        if (!Objects.equals(config.getCacheType(), "local")) {
+            return null;
         }
+        CachePolicy cachePolicy = new CachePolicy();
+        cachePolicy.setType(config.getCacheType());
+        Integer cacheExpireAfterWrite =
+                config.getCacheExpireAfterWrite() != null ? config.getCacheExpireAfterWrite() : -1;
+        cachePolicy.setExpireAfterWrite(cacheExpireAfterWrite.longValue());
+        int size =
+                config.getCacheSize() == null ? 100000 : config.getCacheSize() > 300000 ? 300000 : config.getCacheSize();
+        cachePolicy.setSize(size);
+        cachePolicy.setNullable(config.getCacheNullable() != null ? config.getCacheNullable() : true);
+        return cachePolicy;
     }
 
     public static CachePolicy getCachePolicy(Map<String, String> configMap) {
@@ -127,4 +85,73 @@ public class CachePolicy implements Serializable {
         return cachePolicy;
     }
 
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public int getSize() {
+        return size;
+    }
+
+    public void setSize(int size) {
+        this.size = size;
+    }
+
+    public boolean isLoadOnBeginning() {
+        return loadOnBeginning;
+    }
+
+    public void setLoadOnBeginning(boolean loadOnBeginning) {
+        this.loadOnBeginning = loadOnBeginning;
+    }
+
+    public boolean isNullable() {
+        return nullable;
+    }
+
+    public void setNullable(boolean nullable) {
+        this.nullable = nullable;
+    }
+
+    public long getExpireAfterWrite() {
+        return expireAfterWrite;
+    }
+
+    public void setExpireAfterWrite(long expireAfterWrite) {
+        this.expireAfterWrite = expireAfterWrite;
+    }
+
+    @Override
+    public String toString() {
+        return "CachePolicy{"
+                + "type='" + type + '\''
+                + ", size=" + size
+                + ", loadOnBeginning=" + loadOnBeginning
+                + ", nullable=" + nullable
+                + ", expireAfterWrite=" + expireAfterWrite + '}';
+    }
+
+    public enum DimUpdatePolicy {
+        MINUTE(15, 15),
+        HOUR(300, 300),
+        DAY(1800, 1800),
+        RANDOM(-1, -1);
+
+        public final int expireDuration;
+        public final int refreshDuration;
+
+        DimUpdatePolicy(int expireDuration, int refreshDuration) {
+            this.expireDuration = expireDuration;
+            this.refreshDuration = refreshDuration;
+        }
+
+        public static DimUpdatePolicy matches(String name) {
+            return Stream.of(DimUpdatePolicy.values())
+                    .filter(e -> Objects.equals(e.name(), name)).findAny().orElse(null);
+        }
+    }
 }

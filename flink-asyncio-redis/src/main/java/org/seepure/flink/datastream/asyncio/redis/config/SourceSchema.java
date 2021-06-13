@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
 
+@Deprecated
 public abstract class SourceSchema implements Serializable /*implements DeserializationSchema<Map<String, String>>*/ {
 
     public static SourceSchema getSourceSchema(Map<String, String> configMap) throws Exception {

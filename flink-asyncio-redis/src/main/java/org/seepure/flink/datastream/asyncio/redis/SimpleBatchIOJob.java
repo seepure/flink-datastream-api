@@ -54,7 +54,8 @@ public class SimpleBatchIOJob {
 //                "redis.mode=cluster;redis.nodes=redis://192.168.234.139:7000,redis://192.168.234.139:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001"
 //                        + ";source.schema.type=MQ_TEXT;source.schema.content={\"sourceType\":\"ATTA\",\"contentType\":\"MQ_TEXT\",\"encoding\":\"UTF-8\",\"separator\":\"|\",\"peekQps\":1,\"maxStorageAday\":3,\"schema\":[{\"fieldKey\":\"userId\",\"fieldName\":\"用户id\",\"fieldType\":1,\"fieldIndex\":0},{\"fieldKey\":\"age\",\"fieldName\":\"年龄\",\"fieldType\":1,\"fieldIndex\":1},{\"fieldKey\":\"country\",\"fieldName\":\"国家\",\"fieldType\":1,\"fieldIndex\":2}],\"metadataId\":100};"
 //                        + "dim.schema.type=redis.hash;dim.schema.content={};joinRule.type=left_join;joinRule.rightFields=bh_%s;joinRule.leftFields=userId;cachePolicy.type=local;cachePolicy.expireAfterWrite=50;cachePolicy.size=200";
-        String defaultRedisHashJoinArg = "redis.mode=cluster;redis.nodes=9.146.159.128:6379;source.schema.type=MQ_TEXT;source.schema.content={\"sourceType\":\"ATTA\",\"contentType\":\"MQ_TEXT\",\"encoding\":\"UTF-8\",\"separator\":\"|\",\"peekQps\":1,\"maxStorageAday\":3,\"schema\":[{\"fieldKey\":\"userId\",\"fieldName\":\"用户id\",\"fieldType\":1,\"fieldIndex\":0},{\"fieldKey\":\"age\",\"fieldName\":\"年龄\",\"fieldType\":1,\"fieldIndex\":1},{\"fieldKey\":\"country\",\"fieldName\":\"国家\",\"fieldType\":1,\"fieldIndex\":2}],\"metadataId\":100};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=bh_%s;joinRule.leftFields=userId";
+        //String defaultRedisHashJoinArg = "redis.mode=cluster;redis.nodes=9.146.159.128:6379;source.schema.type=MQ_TEXT;source.schema.content={\"sourceType\":\"ATTA\",\"contentType\":\"MQ_TEXT\",\"encoding\":\"UTF-8\",\"separator\":\"|\",\"peekQps\":1,\"maxStorageAday\":3,\"schema\":[{\"fieldKey\":\"userId\",\"fieldName\":\"用户id\",\"fieldType\":1,\"fieldIndex\":0},{\"fieldKey\":\"age\",\"fieldName\":\"年龄\",\"fieldType\":1,\"fieldIndex\":1},{\"fieldKey\":\"country\",\"fieldName\":\"国家\",\"fieldType\":1,\"fieldIndex\":2}],\"metadataId\":100};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=bh_%s;joinRule.leftFields=userId";
+        String defaultRedisHashJoinArg = "redis.mode=master_slave;redis.nodes=192.168.234.139:6379;source.schema.type=MQ_TEXT;source.schema.content={\"sourceType\":\"ATTA\",\"contentType\":\"MQ_TEXT\",\"encoding\":\"UTF-8\",\"separator\":\"|\",\"peekQps\":1,\"maxStorageAday\":3,\"schema\":[{\"fieldKey\":\"userId\",\"fieldName\":\"用户id\",\"fieldType\":1,\"fieldIndex\":0},{\"fieldKey\":\"age\",\"fieldName\":\"年龄\",\"fieldType\":1,\"fieldIndex\":1},{\"fieldKey\":\"country\",\"fieldName\":\"国家\",\"fieldType\":1,\"fieldIndex\":2}],\"metadataId\":100};dim.schema.type=redis.hash;dim.schema.content={};joinRule.rightFields=bh_%s;joinRule.leftFields=userId";
         String arg = args != null && args.length >= 1 ? args[0] : defaultRedisHashJoinArg;
         //"redis.mode=cluster;redis.nodes=redis://192.168.234.137:7000,redis://192.168.234.137:7001,redis://192.168.234.138:7000,redis://192.168.234.138:7001,redis://192.168.234.134:7000,redis://192.168.234.134:7001";
         Map<String, String> configMap = ArgUtil.getArgMapFromArgs(arg);
@@ -62,9 +63,9 @@ public class SimpleBatchIOJob {
         //configMap.put("redis.nodes", "redis://192.168.213.128:7000,redis://192.168.213.128:7001,redis://192.168.213.129:7000,redis://192.168.213.129:7001,redis://192.168.213.130:7000,redis://192.168.213.130:7001");
         ParameterTool params = ParameterTool.fromMap(configMap);
         StreamExecutionEnvironment env = getEnv(params);
-        DataStream<String> in = env.addSource(new PressureRandomSource("mykey", 1_000_000, 1000));
+        DataStream<String> in = env.addSource(new SelfRandomTextSource("mykey", 10, 1000));
         SingleOutputStreamOperator<String> stream = in.flatMap(new SimpleRedisBatchFlatMap(configMap));
-        stream.addSink(new PerformanceCountSink());
+        stream.addSink(new SimpleSinkFunction());
         env.execute();
     }
 

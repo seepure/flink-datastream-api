@@ -1,14 +1,13 @@
 package org.seepure.flink.datastream.asyncio.redis.config;
 
-import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.seepure.flink.datastream.asyncio.redis.config.RedisJoinConfig.TableSchema;
 
-@Deprecated
-public class DimRedisHashSchema extends DimRedisSchema<Map<String, String>> {
+public class RedisHashSchemaExecutor extends TableSchemaExecutor<Map<String, String>> {
 
     @Override
-    public void parseConfig(String configContent) throws IOException {
+    public void parseConfig(TableSchema tableSchema) {
 
     }
 
@@ -18,5 +17,10 @@ public class DimRedisHashSchema extends DimRedisSchema<Map<String, String>> {
             return new LinkedHashMap<>();
         }
         return input;
+    }
+
+    @Override
+    public Map<String, String> parseBytes(byte[] bytes) {
+        return null;
     }
 }

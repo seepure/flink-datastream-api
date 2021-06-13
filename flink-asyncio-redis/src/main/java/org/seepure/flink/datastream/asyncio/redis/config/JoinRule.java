@@ -9,6 +9,7 @@ import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
 
 public class JoinRule implements Serializable {
+
     public static final String LEFT_JOIN_TYPE = "left_join";
     public static final String INNER_JOIN_TYPE = "inner_join";
     private String type;
@@ -49,6 +50,25 @@ public class JoinRule implements Serializable {
         }
         joinRule.leftFields = Arrays.asList(leftString.trim().split(","));
         joinRule.rightFields = Arrays.asList(rightString.trim().split(","));
+        return joinRule;
+    }
+
+    public static JoinRule parseJoinRule(RedisJoinConfig redisJoinConfig) {
+        if (!LEFT_JOIN_TYPE.equalsIgnoreCase(redisJoinConfig.getJoinRuleType()) && !INNER_JOIN_TYPE
+                .equalsIgnoreCase(redisJoinConfig.getJoinRuleType())) {
+            throw new IllegalArgumentException(
+                    "joinRuleType/joinRule.type is illegal, value=" + redisJoinConfig.getJoinRuleType());
+        }
+        JoinRule joinRule = new JoinRule();
+        joinRule.type = redisJoinConfig.getJoinRuleType();
+        if (StringUtils.isBlank(redisJoinConfig.getJoinRuleLeftFields()) || StringUtils
+                .isBlank(redisJoinConfig.getJoinRuleRightFields())) {
+            throw new IllegalArgumentException(
+                    "parseJoinRule error! leftString=[" + redisJoinConfig.getJoinRuleLeftFields() + "], rightString=["
+                            + redisJoinConfig.getJoinRuleRightFields() + "]");
+        }
+        joinRule.leftFields = Arrays.asList(redisJoinConfig.getJoinRuleLeftFields().trim().split(","));
+        joinRule.rightFields = Arrays.asList(redisJoinConfig.getJoinRuleRightFields().trim().split(","));
         return joinRule;
     }
 

@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.apache.commons.lang3.StringEscapeUtils;
@@ -14,9 +16,10 @@ import org.seepure.flink.datastream.asyncio.redis.util.JsonUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Deprecated
 public class KvTextSourceSchema extends SourceSchema {
 
-    private final static Logger LOG = LoggerFactory.getLogger(KvTextSourceSchema.class);
+    private static final Logger LOG = LoggerFactory.getLogger(KvTextSourceSchema.class);
     private String separator1;
     private String separator2;
     private String charset;
@@ -33,7 +36,8 @@ public class KvTextSourceSchema extends SourceSchema {
             LOG.warn(e.getMessage());
         }
         if (jsonNode == null) {
-            configContent = new String(Base64.getDecoder().decode(configContent.getBytes("UTF8")), "UTF8");
+            configContent = new String(Base64.getDecoder().decode(configContent.getBytes(StandardCharsets.UTF_8)),
+                    StandardCharsets.UTF_8);
             configContent = StringEscapeUtils.unescapeJson(configContent);
             jsonNode = objectMapper.readTree(configContent);
         }
@@ -51,7 +55,7 @@ public class KvTextSourceSchema extends SourceSchema {
             String content = new String(bytes, charset);
             return parseInput(content);
         } catch (UnsupportedEncodingException e) {
-            return null;
+            return Collections.emptyMap();
         }
     }
 
